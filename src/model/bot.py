@@ -76,11 +76,7 @@ class Bot(object):
     @classmethod
     def init_exp_replayer(cls, parameters, path):
         cls.expReplayer = None
-        if parameters.JOB_TRAINING_STEPS != 0 and parameters.JOB_STEP_START > 0:
-            with open(path + 'replay_buffer.pkl', 'rb') as input:
-                cls.expReplayer = pkl.load(input)
-
-        elif parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+        if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
             cls.expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA,
                                                       parameters.MEMORY_BETA)
         else:

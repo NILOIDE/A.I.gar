@@ -13,7 +13,6 @@ from model.rgbGenerator import *
 
 import linecache
 import os
-import shutil
 import tracemalloc
 import pickle as pkl
 
@@ -94,8 +93,7 @@ class Model(object):
     def initialize(self, modelHasBeenLoaded):
         print("Initializing model...")
         if self.trainingEnabled:
-            for bot in self.bots:
-                bot.saveInitialModels(self.path)
+            self.bots[0].saveInitialModels(self.path)
             if not modelHasBeenLoaded:
                 self.saveSpecs()
                 for bot in self.bots:
@@ -219,141 +217,6 @@ class Model(object):
     def resetBots(self):
         for bot in self.bots:
             bot.reset()
-
-
-    def initModelFolder(self, name = None, loadedModelName = None, model_in_subfolder = None):
-        if name is None:
-            self.createPath()
-        else:
-            if loadedModelName is None:
-                self.createNamedPath(name)
-            else:
-                if model_in_subfolder:
-                    self.createNamedLoadPath(name, loadedModelName)
-                else:
-                    self.createLoadPath(loadedModelName)
-        self.copyParameters(loadedModelName)
-
-
-    def createPath(self):
-        basePath = "savedModels/"
-        if not os.path.exists(basePath):
-            os.makedirs(basePath)
-        now = datetime.datetime.now()
-        self.startTime = now
-        nowStr = now.strftime("%b-%d_%H:%M")
-        path = basePath + "$" + nowStr + "$"
-        # Also display seconds in name if we already have a model this minute
-        if os.path.exists(path):
-            nowStr = now.strftime("%b-%d_%H:%M:%S")
-            path = basePath + "$" + nowStr + "$"
-        os.makedirs(path)
-        path += "/"
-        print("Path: ", path)
-        self.path = path
-
-    def countLoadDepth(self, loadedModelName):
-        if loadedModelName[-3] == ")" and loadedModelName[-6:-4] == "(l":
-            loadDepth = int(loadedModelName[-4]) + 1
-        else:
-            loadDepth = 1
-        loadString = "_(l" + str(loadDepth) + ")"
-        return loadString
-
-    def createLoadPath(self, loadedModelName):
-        loadDepth = self.countLoadDepth(loadedModelName)
-        basePath = "savedModels/"
-        if not os.path.exists(basePath):
-            os.makedirs(basePath)
-        now = datetime.datetime.now()
-        self.startTime = now
-        nowStr = now.strftime("%b-%d_%H:%M")
-        path = basePath + "$" + nowStr + loadDepth + "$"
-        # Also display seconds in name if we already have a model this minute
-        if os.path.exists(path):
-            nowStr = now.strftime("%b-%d_%H:%M:%S")
-            path = basePath + "$" + nowStr + loadDepth + "$"
-        os.makedirs(path)
-        path += "/"
-        print("Path: ", path)
-        self.path = path
-
-    def countNamedLoadDepth(self, superName, loadedModelName):
-        char = -3
-        while loadedModelName[char] != "/":
-            char -= 1
-        if loadedModelName[char-1] == ")" and loadedModelName[char-4:char-2] == "(l":
-            loadDepth = int(loadedModelName[char-2]) + 1
-        else:
-            loadDepth = 1
-        loadString = "_(l" + str(loadDepth) + ")"
-        superName = superName[0:len(superName)-1] + loadString + "/"
-        return superName
-
-    def createNamedLoadPath(self, superName, loadedModelName):
-        superName = self.countNamedLoadDepth(superName, loadedModelName)
-        basePath = "savedModels/"
-        if not os.path.exists(basePath):
-            os.makedirs(basePath)
-        # Create subFolder for given parameter tweaking
-        osPath = os.getcwd() + "/" + superName
-        time.sleep(numpy.random.rand())
-        if not os.path.exists(osPath):
-            os.makedirs(osPath)
-        # Create folder based on name
-        now = datetime.datetime.now()
-        self.startTime = now
-        nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
-        path = superName + "$" + nowStr + "$"
-        time.sleep(numpy.random.rand())
-        if os.path.exists(path):
-            randNum = numpy.random.randint(100000)
-            path = superName + "$" + nowStr + "-" + str(randNum) + "$"
-        os.makedirs(path)
-        path += "/"
-        print("Super Path: ", superName)
-        print("Path: ", path)
-        self.path = path
-
-    def createNamedPath(self, superName):
-        #Create savedModels folder
-        basePath = "savedModels/"
-        if not os.path.exists(basePath):
-            os.makedirs(basePath)
-        #Create subFolder for given parameter tweaking
-        osPath = os.getcwd() + "/" + superName
-        time.sleep(numpy.random.rand())
-        if not os.path.exists(osPath):
-            os.makedirs(osPath)
-        #Create folder based on name
-        now = datetime.datetime.now()
-        self.startTime = now
-        nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
-        path = superName  + "$" + nowStr + "$"
-        time.sleep(numpy.random.rand())
-        if os.path.exists(path):
-            randNum = numpy.random.randint(100000)
-            path = superName + "$" + nowStr + "-" + str(randNum) + "$"
-        os.makedirs(path)
-        path += "/"
-        print("Super Path: ", superName)
-        print("Path: ", path)
-        self.path = path
-
-    def copyParameters(self, loadedModelName = None):
-        # Copy the simulation, NN and RL parameters so that we can load them later on
-        if loadedModelName is None:
-            shutil.copy("model/networkParameters.py", self.path)
-            shutil.copy("model/parameters.py", self.path)
-        else:
-            shutil.copy(loadedModelName + "networkParameters.py", self.path)
-            shutil.copy(loadedModelName + "parameters.py", self.path)
-            if os.path.exists(loadedModelName + "model.h5"):
-                shutil.copy(loadedModelName + "model.h5", self.path)
-            if os.path.exists(loadedModelName + "actor_model.h5"):
-                shutil.copy(loadedModelName + "actor_model.h5", self.path)
-            if os.path.exists(loadedModelName + "value_model.h5"):
-                shutil.copy(loadedModelName + "value_model.h5", self.path)
 
 
     def addDataFilesToDictionary(self):

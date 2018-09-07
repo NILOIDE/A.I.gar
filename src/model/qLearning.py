@@ -2,6 +2,7 @@ import numpy
 import heapq
 import math
 from .network import Network
+from keras import backend as K
 
 def boltzmannDist(values, temp):
     maxVal = max(values)
@@ -15,9 +16,7 @@ class QLearn(object):
     def __repr__(self):
         return "Q-learning"
 
-    def __init__(self, numOfNNbots, numOfHumans, parameters):
-        self.num_NNbots = numOfNNbots
-        self.num_humans = numOfHumans
+    def __init__(self, parameters):
         self.network = None
         self.temporalDifference = parameters.TD
         self.parameters = parameters

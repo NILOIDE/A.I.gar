@@ -1,19 +1,8 @@
-1
-1
-0
-0
-1
-NUM_NN_BOTS
-1
-1
-TRAINING_WAIT_TIME
-1
-1
-ENABLE_TESTING
-False
 0
 0
 0
 0
+0
+1
 1
 

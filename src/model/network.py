@@ -1,17 +1,7 @@
 import heapq
-import keras
 
-keras.backend.set_image_dim_ordering('tf')
 import numpy
-
 numpy.set_printoptions(threshold=numpy.nan)
-import tensorflow as tf
-import keras.backend as K
-from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization
-from keras.models import Sequential
-from keras.utils.training_utils import multi_gpu_model
-from keras.models import load_model, save_model
-from keras.constraints import maxnorm
 
 from .parameters import *
 
@@ -69,6 +59,16 @@ def createDiscreteActionsSquare(numActions, enableSplit, enableEject):
 
 class Network(object):
     def __init__(self, parameters, modelName = None):
+        import keras
+        keras.backend.set_image_dim_ordering('tf')
+        import tensorflow as tf
+        import keras.backend as K
+        from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization
+        from keras.models import Sequential
+        from keras.utils.training_utils import multi_gpu_model
+        from keras.models import load_model, save_model
+        from keras.constraints import maxnorm
+
         self.parameters = parameters
 
         if parameters.SQUARE_ACTIONS:
@@ -299,6 +299,7 @@ class Network(object):
             self.valueNetwork = keras.models.Model(inputs=self.input, outputs=output)
 
         elif self.parameters.NEURON_TYPE == "LSTM":
+
             # Hidden Layer 1
             # TODO: Use CNN with LSTM
             # if self.parameters.CNN_REPR:
@@ -308,28 +309,28 @@ class Network(object):
             #                    stateful= stateful_training, batch_size=self.batch_len)
             hidden1 = LSTM(self.hiddenLayer1, input_shape=input_shape_lstm, return_sequences=True,
                            stateful=stateful_training, batch_size=self.batch_len, bias_initializer=initializer
-                           , kernel_initializer=initializer)
-            self.valueNetwork.add(hidden1)
+                           , kernel_initializer=initializer)(self.valueNetwork)
             # Hidden 2
             if self.hiddenLayer2 > 0:
                 hidden2 = LSTM(self.hiddenLayer2, return_sequences=True, stateful=stateful_training,
                                batch_size=self.batch_len, bias_initializer=initializer
-                               , kernel_initializer=initializer)
-                self.valueNetwork.add(hidden2)
+                               , kernel_initializer=initializer)(self.valueNetwork)
             # Hidden 3
             if self.hiddenLayer3 > 0:
                 hidden3 = LSTM(self.hiddenLayer3, return_sequences=True, stateful=stateful_training,
                                batch_size=self.batch_len, bias_initializer=initializer
-                               , kernel_initializer=initializer)
-                self.valueNetwork.add(hidden3)
+                               , kernel_initializer=initializer)(self.valueNetwork)
             # Output layer
             output = LSTM(outputDim, activation=self.activationFuncOutput,
                           return_sequences=True, stateful=stateful_training, batch_size=self.batch_len,
                           bias_initializer=initializer
-                          , kernel_initializer=initializer)
-            self.valueNetwork.add(output)
+                          , kernel_initializer=initializer)(self.valueNetwork)
+            self.valueNetwork = keras.models.Model(inputs=self.input, outputs=output)
+
 
         # Create target network
+        self.valueNetwork._make_predict_function()
+
         self.targetNetwork = keras.models.clone_model(self.valueNetwork)
         self.targetNetwork.set_weights(self.valueNetwork.get_weights())
 
@@ -388,6 +389,21 @@ class Network(object):
 
         if modelName is not None:
             self.load(modelName)
+        self.targetNetwork._make_predict_function()
+        sess = tf.Session()
+        sess.run(tf.global_variables_initializer())
+        self.graph = tf.get_default_graph()
+
+
+    # Necessary for multiprocessing to warm up the network
+    def dummy_prediction(self):
+        if self.parameters.CNN_REPR:
+            input_shape = ([self.parameters.NUM_OF_GRIDS, self.stateReprLen, self.stateReprLen])
+        else:
+            input_shape = (self.stateReprLen,)
+        dummy_input = numpy.zeros(input_shape)
+        dummy_input = numpy.array([dummy_input])
+        self.predict(dummy_input)
 
     def reset_general(self, model):
         session = K.get_session()
@@ -413,6 +429,7 @@ class Network(object):
         self.loadedModelName = modelName
         self.valueNetwork = keras.models.load_model(path + "model.h5")
         self.targetNetwork = load_model(path + "model.h5")
+
 
     def trainOnBatch(self, inputs, targets, importance_weights):
         if self.parameters.NEURON_TYPE == "LSTM":
@@ -458,7 +475,9 @@ class Network(object):
                     state = [grid, extra]
                 else:
                     state = numpy.array([state])
-        return self.valueNetwork.predict(state)[0]
+        with self.graph.as_default():
+            prediction = self.valueNetwork.predict(state)[0]
+            return prediction
 
     def predictTargetQValues(self, state):
         if self.parameters.USE_ACTION_AS_INPUT:

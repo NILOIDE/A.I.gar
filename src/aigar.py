@@ -1,5 +1,8 @@
 import os
 import importlib
+import shutil
+import time
+import datetime
 #import pyximport; pyximport.install()
 from controller.controller import Controller
 from model.qLearning import *
@@ -10,6 +13,8 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import subprocess
 from builtins import input
+import pathos.multiprocessing as mp
+from time import sleep
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
@@ -73,63 +78,143 @@ def fix_seeds(seedNum):
         sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
         K.set_session(sess)
 
-def submitNewJob(path):
-    i = -2
-    while True:
-        if path[i] == "/":
-            break
-        else:
-            i -= 1
-    modelTimeName = path[i+1:-1]
-    if path[i-11:i] != "savedModels":
-        j = i - 1
-        while True:
-            if path[j] == "/":
-                break
-            else:
-                j -= 1
-        modelParamName = path[j+1:i]
-        fileName = modelParamName + "_" + modelTimeName + ".sh"
-        print("Sbatch file name", fileName)
-        slurmName = modelParamName + "_" + modelTimeName
-        loadLines = modelParamName + "\n" + modelTimeName + "\n"
+
+
+def initModelFolder(name = None, loadedModelName = None, model_in_subfolder = None):
+    if name is None:
+        path, startTime = createPath()
     else:
-        fileName = modelTimeName + ".sh"
-        print("Sbatch file name", fileName)
-        slurmName = modelTimeName
-        loadLines = modelTimeName + "\n"
+        if loadedModelName is None:
+            path, startTime = createNamedPath(name)
+        else:
+            if model_in_subfolder:
+                path, startTime = createNamedLoadPath(name, loadedModelName)
+            else:
+                path, startTime = createLoadPath(loadedModelName)
+    copyParameters(path, loadedModelName)
+    return path, startTime
 
-    script = open(fileName, "w+")
-    time = "0-20:00:00"
-    memoryLimit = 120000
-    email = "n.stolt.anso@student.rug.nl"
-    algorithmLine = str(0) + "\n"
 
-    data = "#!/bin/bash\n" \
-           + "#SBATCH --time=" + time + "\n"\
-           + "#SBATCH --mem=" + str(memoryLimit) + "\n" \
-           + "#SBATCH --nodes=1\n"\
-           + "#SBATCH --mail-type=ALL\n"\
-           + "#SBATCH --mail-user=" + email + "\n" \
-           + "#SBATCH --output=" + slurmName + "_%j.out\n" \
-           + "module load matplotlib/2.1.2-foss-2018a-Python-3.6.4\n" \
-           + "module load TensorFlow/1.6.0-foss-2018a-Python-3.6.4\n" \
-           + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\n" \
-           + "python -O ./aigar.py <<EOF\n" \
-           + "0\n1\n" + loadLines + algorithmLine + "0\n0\n1\nEOF\n"
-    script.write(data)
-    script.close()
+def createPath():
+    basePath = "savedModels/"
+    if not os.path.exists(basePath):
+        os.makedirs(basePath)
+    now = datetime.datetime.now()
+    startTime = now
+    nowStr = now.strftime("%b-%d_%H:%M")
+    path = basePath + "$" + nowStr + "$"
+    # Also display seconds in name if we already have a model this minute
+    if os.path.exists(path):
+        nowStr = now.strftime("%b-%d_%H:%M:%S")
+        path = basePath + "$" + nowStr + "$"
+    os.makedirs(path)
+    path += "/"
+    print("Path: ", path)
+    return path, startTime
 
-    try:
-        subprocess.call(["sbatch", fileName])
-    except FileNotFoundError:
-        script.close()
-        print("Command sbatch not found or filename invalid!")
-        print("Filename: ", fileName)
+def countLoadDepth(loadedModelName):
+    if loadedModelName[-3] == ")" and loadedModelName[-6:-4] == "(l":
+        loadDepth = int(loadedModelName[-4]) + 1
+    else:
+        loadDepth = 1
+    loadString = "_(l" + str(loadDepth) + ")"
+    return loadString
 
-    os.remove(fileName)
+def createLoadPath(loadedModelName):
+    loadDepth = countLoadDepth(loadedModelName)
+    basePath = "savedModels/"
+    if not os.path.exists(basePath):
+        os.makedirs(basePath)
+    now = datetime.datetime.now()
+    startTime = now
+    nowStr = now.strftime("%b-%d_%H:%M")
+    path = basePath + "$" + nowStr + loadDepth + "$"
+    # Also display seconds in name if we already have a model this minute
+    if os.path.exists(path):
+        nowStr = now.strftime("%b-%d_%H:%M:%S")
+        path = basePath + "$" + nowStr + loadDepth + "$"
+    os.makedirs(path)
+    path += "/"
+    print("Path: ", path)
+    return path, startTime
 
-    print("Submitted job: ", fileName)
+def countNamedLoadDepth(superName, loadedModelName):
+    char = -3
+    while loadedModelName[char] != "/":
+        char -= 1
+    if loadedModelName[char-1] == ")" and loadedModelName[char-4:char-2] == "(l":
+        loadDepth = int(loadedModelName[char-2]) + 1
+    else:
+        loadDepth = 1
+    loadString = "_(l" + str(loadDepth) + ")"
+    superName = superName[0:len(superName)-1] + loadString + "/"
+    return superName
+
+def createNamedLoadPath(superName, loadedModelName):
+    superName = countNamedLoadDepth(superName, loadedModelName)
+    basePath = "savedModels/"
+    if not os.path.exists(basePath):
+        os.makedirs(basePath)
+    # Create subFolder for given parameter tweaking
+    osPath = os.getcwd() + "/" + superName
+    time.sleep(numpy.random.rand())
+    if not os.path.exists(osPath):
+        os.makedirs(osPath)
+    # Create folder based on name
+    now = datetime.datetime.now()
+    startTime = now
+    nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
+    path = superName + "$" + nowStr + "$"
+    time.sleep(numpy.random.rand())
+    if os.path.exists(path):
+        randNum = numpy.random.randint(100000)
+        path = superName + "$" + nowStr + "-" + str(randNum) + "$"
+    os.makedirs(path)
+    path += "/"
+    print("Super Path: ", superName)
+    print("Path: ", path)
+    return path, startTime
+
+def createNamedPath(self, superName):
+    #Create savedModels folder
+    basePath = "savedModels/"
+    if not os.path.exists(basePath):
+        os.makedirs(basePath)
+    #Create subFolder for given parameter tweaking
+    osPath = os.getcwd() + "/" + superName
+    time.sleep(numpy.random.rand())
+    if not os.path.exists(osPath):
+        os.makedirs(osPath)
+    #Create folder based on name
+    now = datetime.datetime.now()
+    startTime = now
+    nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
+    path = superName  + "$" + nowStr + "$"
+    time.sleep(numpy.random.rand())
+    if os.path.exists(path):
+        randNum = numpy.random.randint(100000)
+        path = superName + "$" + nowStr + "-" + str(randNum) + "$"
+    os.makedirs(path)
+    path += "/"
+    print("Super Path: ", superName)
+    print("Path: ", path)
+    return path, startTime
+
+def copyParameters(path, loadedModelName = None):
+    # Copy the simulation, NN and RL parameters so that we can load them later on
+    if loadedModelName is None:
+        shutil.copy("model/networkParameters.py", path)
+        shutil.copy("model/parameters.py", path)
+    else:
+        shutil.copy(loadedModelName + "networkParameters.py", path)
+        shutil.copy(loadedModelName + "parameters.py", path)
+        if os.path.exists(loadedModelName + "model.h5"):
+            shutil.copy(loadedModelName + "model.h5", path)
+        if os.path.exists(loadedModelName + "actor_model.h5"):
+            shutil.copy(loadedModelName + "actor_model.h5", path)
+        if os.path.exists(loadedModelName + "value_model.h5"):
+            shutil.copy(loadedModelName + "value_model.h5", path)
+
 
 def setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode):
     seedNumber = None
@@ -153,6 +238,7 @@ def algorithmNumberToName(val):
 
 
 def algorithmNameToNumber(name):
+    name = str(name)
     if name == "Q-learning":
         return 0
     elif name == "AC":
@@ -180,8 +266,8 @@ def checkValidParameter(param):
     quit()
 
 
-def modifyParameterValue(tweaked, model):
-    name_of_file = model.getPath() + "networkParameters.py"
+def modifyParameterValue(tweaked, path):
+    name_of_file = path + "networkParameters.py"
     lines = open(name_of_file, 'r').readlines()
     for i in range(len(tweaked)):
         text = ""
@@ -189,16 +275,16 @@ def modifyParameterValue(tweaked, model):
             text += char
             if char == "=":
                 break
-        if tweaked[i][0] == "RESET_LIMIT":
-            model.resetLimit = int(tweaked[i][1])
+        # if tweaked[i][0] == "RESET_LIMIT":
+        #     model.resetLimit = int(tweaked[i][1])
         print(tweaked[i][0])
         text += " " + str(tweaked[i][1]) + "\n"
         lines[tweaked[i][2]] = text
     out = open(name_of_file, 'w')
     out.writelines(lines)
     out.close()
-    parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
-    model.initParameters(parameters)
+    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
+    # model.initParameters(parameters)
 
 
 def nameSavedModelFolder(array):
@@ -251,7 +337,7 @@ def createBots(number, model, botType, parameters, algorithm=None, loadModel=Non
         for i in range(number):
             # Create algorithm instance
             if algorithm == 0:
-                learningAlg = QLearn(number, 0, parameters)
+                learningAlg = QLearn(parameters)
             elif algorithm == 2:
                 learningAlg = ActorCritic(parameters)
             else:
@@ -268,114 +354,138 @@ def createBots(number, model, botType, parameters, algorithm=None, loadModel=Non
             model.createBot(botType, None, parameters)
 
 
-def testModel(testingModel, n_training, reset_time, modelPath, name, plotting=True):
+def performTest(testParams, testSteps):
+
+    testModel = Model(False, False, testParams, False)
+    # pelletModel.createBot("NN", currentAlg, parameters)
+    # TODO: Change to NN bots
+    createBots(testParams.NUM_NN_BOTS, testModel, "Greedy", testParams,0)
+
+    bots = testModel.getBots()
+    testModel.initialize(False)
+    for step in range(testSteps):
+        testModel.update()
+
+    massOverTime = [bot.getMassOverTime() for bot in bots]
+    meanMass = numpy.mean([numpy.mean(botMass) for botMass in massOverTime])
+    maxMeanMass = numpy.max(meanMass)
+    maxMass = numpy.max([numpy.max(botMass) for botMass in massOverTime])
+    varianceMass = numpy.mean(numpy.var(massOverTime))
+
+    print("Test run:" +
+          "\n  Process id: " + str(os.getpid()) +
+          "\n  Number of bot mass lists: " + str(len(massOverTime)) +
+          "\n  Mean mass: "+ str(meanMass) +
+          "\n  Max mass: "+ str(maxMass) +
+          "\n")
+
+    return [massOverTime, meanMass, maxMass]
+
+
+def testModel(n_tests, testSteps, modelPath, name, testParams=None):
+    print("Testing", name, "...")
+    start = time.time()
+
+    # Serial Testing
+    currentEval = []
+    # for i in range(n_training):
+    #     currentEval.append(performTest(testParams, testSteps))
+
+    # Parallel testing
+    pool = mp.Pool(n_tests)
+    testResults = pool.starmap(performTest, [(testParams, testSteps) for process in range(n_tests)])
+    print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
+    print("------------------------------------------------------------------\n")
+
     masses = []
     meanMasses = []
     maxMasses = []
-    bot = testingModel.getNNBot()
-    print("Testing ", name, "...")
-    testingModel.initialize(False)
-    # viewTestModel = View(testModel, screenWidth, screenHeight)
-    # viewTestModel.draw()
-    plotPath = modelPath
-    modelPath += "data/"
-    if not os.path.exists(modelPath):
-        os.mkdir(modelPath)
-    for test in range(n_training):
-        bot.resetMassList()
-        testingModel.resetModel()
-        for updateStep in range(reset_time):
-            testingModel.update()
-
-        massOverTime = bot.getMassOverTime()
-        meanMass = numpy.mean(massOverTime)
-        maxMass = numpy.max(massOverTime)
-        masses.append(massOverTime)
-        meanMasses.append(meanMass)
-        maxMasses.append(maxMass)
-        print("Mean mass for run ", test + 1, ": ", meanMass)
-        if plotting:
-            exportTestResults(massOverTime, modelPath, "Run_" + str(test + 1) + "_Mean_Mass_" + name)
-        #else:
-        #    exportTestResults(massOverTime, modelPath, name + "_run_" + str(test + 1))
+    for test in range(n_tests):
+        masses.extend(testResults[test][0])
+        meanMasses.append(testResults[test][1])
+        maxMasses.append(testResults[test][2])
 
     meanScore = numpy.mean(meanMasses)
     stdMean = numpy.std(meanMasses)
     meanMaxScore = numpy.mean(maxMasses)
     stdMax = numpy.std(maxMasses)
     maxScore = numpy.max(maxMasses)
-    if plotting:
-        meanMassPerTimeStep = []
-        for timeIdx in range(reset_time):
-            val = 0
-            for listIdx in range(n_training):
-                val += masses[listIdx][timeIdx]
-            meanVal = val / n_training
-            meanMassPerTimeStep.append(meanVal)
+    # TODO: fix plotting
+    # plotPath = modelPath
+    # modelPath += "data/"
+    # if not os.path.exists(modelPath):
+    #     os.mkdir(modelPath)
+    # if plotting:
+    #     meanMassPerTimeStep = []
+    #     for timeIdx in range(reset_time):
+    #         val = 0
+    #         for listIdx in range(n_training):
+    #             val += masses[listIdx][timeIdx]
+    #         meanVal = val / n_training
+    #         meanMassPerTimeStep.append(meanVal)
+    #
+    #     #exportTestResults(meanMassPerTimeStep, modelPath, "Mean_Mass_" + name)
+    #     labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
+    #               "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": plotPath,
+    #               "subPath": "Mean_Mass_" + name}
+    #     plot(masses, reset_time, 1, labels)
 
-        #exportTestResults(meanMassPerTimeStep, modelPath, "Mean_Mass_" + name)
-        labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
-                  "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": plotPath,
-                  "subPath": "Mean_Mass_" + name}
-        plot(masses, reset_time, 1, labels)
     return name, maxScore, meanScore, stdMean, meanMaxScore, stdMax
 
 
-def cloneModel(model):
-    clone = Model(False, False, model.getParameters(), False)
-    clone.resetLimit = model.resetLimit
-    for bot in model.getBots():
-        clone.createBot(bot.getType(), bot.getLearningAlg(), bot.parameters)
-    return clone
+def updateTestResults(testResults, modelPath, parameters):
+    # currentAlg = model.getNNBot().getLearningAlg()
+    # originalNoise = currentAlg.getNoise()
+    # currentAlg.setNoise(0)
+    #
+    # originalTemp = None
+    # if str(currentAlg) != "AC":
+    #     originalTemp = currentAlg.getTemperature()
+    #     currentAlg.setTemperature(0)
 
+    # TODO: Perform all test kinds simultaneously
+    n_tests = parameters.DUR_TRAIN_TEST_NUM
 
-def updateTestResults(testResults, model, percentage, parameters):
-    currentAlg = model.getNNBot().getLearningAlg()
-    originalNoise = currentAlg.getNoise()
-    clonedModel = cloneModel(model)
-    currentAlg.setNoise(0)
+    currentEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "test", parameters)
 
-    originalTemp = None
-    if str(currentAlg) != "AC":
-        originalTemp = currentAlg.getTemperature()
-        currentAlg.setTemperature(0)
-    currentEval = testModel(clonedModel, 5, 15000 if not clonedModel.resetLimit else clonedModel.resetLimit,
-                            model.getPath(), "test", False)
+    pelletTestParams = modifyParameters(parameters, False)
+    pelletEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "pellet", pelletTestParams)
 
-    params = Params(0, False, parameters.EXPORT_POINT_AVERAGING)
-    pelletModel = Model(False, False, params, False)
-    pelletModel.createBot("NN", currentAlg, parameters)
-    pelletEval = testModel(pelletModel, 5, 15000, model.getPath(), "pellet", False)
-
-    if parameters.MULTIPLE_BOTS_PRESENT:
-        greedyModel = pelletModel
-        greedyModel.createBot("Greedy", None, parameters)
-        vsGreedyEval = testModel(greedyModel, 5, 20000, model.getPath(), "vsGreedy", False)
-    else:
-        vsGreedyEval = (0,0,0,0)
-
+    vsGreedyEval = (0, 0, 0, 0)
     virusGreedyEval = (0, 0, 0, 0)
     virusEval = (0, 0, 0, 0)
+
+    if parameters.MULTIPLE_BOTS_PRESENT:
+        greedyTestParams = modifyParameters(parameters, False, 1, 1)
+        vsGreedyEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "vsGreedy", greedyTestParams)
+
     if parameters.VIRUS_SPAWN:
-        params = Params(0, True, parameters.EXPORT_POINT_AVERAGING)
-        virusModel = Model(False, False, params, False)
-        virusModel.createBot("NN", currentAlg, parameters)
-        virusEval = testModel(virusModel, 5, 15000, model.getPath(), "pellet_with_virus", False)
+        virusTestParams = modifyParameters(parameters, True)
+        virusEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "pellet_with_virus", virusTestParams)
         if parameters.MULTIPLE_BOTS_PRESENT:
-            virusModel.createBot("Greedy", None, parameters)
-            virusGreedyEval = testModel(virusModel, 5, 20000, model.getPath(), "vsGreedy_with_virus", False)
+            virusGreedyTestParams = modifyParameters(parameters, True, 1, 1)
+            virusGreedyEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
 
-
-    currentAlg.setNoise(originalNoise)
-
-    if str(currentAlg) != "AC":
-        currentAlg.setTemperature(originalTemp)
+    # TODO: Check if following commented noise code is needed
+    # currentAlg.setNoise(originalNoise)
+    #
+    # if str(currentAlg) != "AC":
+    #     currentAlg.setTemperature(originalTemp)
 
     meanScore = currentEval[2]
     stdDev = currentEval[3]
     testResults.append((meanScore, stdDev, pelletEval[2], pelletEval[3],
                         vsGreedyEval[2], vsGreedyEval[3], virusEval[2], virusEval[3], virusGreedyEval[2], virusGreedyEval[3]))
     return testResults
+
+
+def modifyParameters(parameters, virus, num_nn_bots=1, num_greedy_bots=0, num_rand_bots=0):
+    testParameters = parameters
+    testParameters.VIRUS_SPAWN = virus
+    testParameters.NUM_NN_BOTS = num_nn_bots
+    testParameters.NUM_GREEDY_BOTS = num_greedy_bots
+    testParameters.NUM_RAND_BOTS = num_rand_bots
+    return testParameters
 
 
 def exportTestResults(testResults, path, name):
@@ -415,14 +525,6 @@ def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
     fig.savefig(path + title + ".pdf")
 
     plt.close()
-
-
-class Params:
-    def __init__(self, time, virus, point_averaging):
-        self.VIRUS_SPAWN = virus
-        self.RESET_LIMIT = time
-        self.EXPORT_POINT_AVERAGING = point_averaging
-
 
 def runTests(model, parameters):
     np.random.seed()
@@ -475,6 +577,97 @@ def runTests(model, parameters):
             data += name + " Highscore: " + maxScore + " Mean: " + meanScore + " StdMean: " + stdMean \
                     + " Mean_Max_Score: " + meanMaxScore + " Std_Max_Score: " + stdMax + "\n"
         file.write(data)
+
+
+def modelPlayers(parameters, model, numberOfHumans, algorithm, loadModel):
+    parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
+    numberOfNNBots = parameters.NUM_NN_BOTS
+    numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
+    numberOfBots = numberOfNNBots + numberOfGreedyBots
+
+    if numberOfNNBots == 0:
+        model.setTrainingEnabled(False)
+
+    if numberOfBots == 0 and not model.viewEnabled:
+        modelMustHavePlayers()
+
+    createHumans(numberOfHumans, model)
+    createBots(numberOfNNBots, model, "NN", parameters, algorithm, loadModel)
+    createBots(numberOfGreedyBots, model, "Greedy", parameters)
+    createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
+
+
+def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
+                    guiEnabled, viewEnabled, numberOfHumans, spectate):
+
+    mouseEnabled = True
+    humanTraining = False
+    if fitsLimitations(numberOfHumans, MAXHUMANPLAYERS):
+        # createHumans(numberOfHumans, model)
+        if numberOfHumans > 0 and not humanTraining:
+            mouseEnabled = int(input("Do you want control Player1 using the mouse? (1 == yes)\n"))
+
+    model = Model(guiEnabled, viewEnabled, parameters, True)
+    model.setTrainingEnabled(enableTrainMode == 1)
+    if spectate == 1:
+        model.addPlayerSpectator()
+
+    modelPlayers(parameters, model, numberOfHumans, algorithm, loadModel)
+
+    Bot.init_exp_replayer(parameters, loadedModelName)
+    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
+
+    model.initialize(loadModel)
+    screenWidth, screenHeight = defineScreenSize(numberOfHumans)
+
+    testResults = None
+    if guiEnabled:
+        view = View(model, screenWidth, screenHeight, parameters)
+        controller = Controller(model, viewEnabled, view, mouseEnabled)
+        view.draw()
+        while controller.running:
+            controller.process_input()
+            model.update()
+    else:
+        maxSteps = parameters.MAX_SIMULATION_STEPS
+        smallPart = max(int(maxSteps / 100), 1)  # constitutes one percent of total training time
+        testPercentage = smallPart * 5
+
+        for step in range(maxSteps):
+            model.update()
+            if step % smallPart == 0 and step != 0:
+                print("Trained: ", round(step / maxSteps * 100, 1), "%")
+                # Test every 5% of training
+            if parameters.ENABLE_TESTING:
+                if step % testPercentage == 0:
+                    testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
+
+
+def performModelSteps(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm):
+    model = Model(False, False, parameters, True)
+    model.setTrainingEnabled(enableTrainMode == 1)
+
+    modelPlayers(parameters, model, 0, algorithm, loadModel)
+
+    Bot.init_exp_replayer(parameters, loadedModelName)
+
+    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
+
+    model.initialize(loadModel)
+
+    maxSteps = parameters.MAX_SIMULATION_STEPS
+    smallPart = max(int(maxSteps / 100), 1)  # constitutes one percent of total training time
+    testPercentage = smallPart * 5
+
+    for step in range(maxSteps):
+        model.update()
+        if step % smallPart == 0 and step != 0:
+            print("Trained: ", round(step / maxSteps * 100, 1), "%")
+            # Test every 5% of training
+        if parameters.ENABLE_TESTING:
+            if step % testPercentage == 0:
+                testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
+
 
 def run():
     # This is used in case we want to use a freezing program to create an .exe
@@ -569,170 +762,85 @@ def run():
     if int(input("Give saveModel folder a custom name? (1 == yes)\n")) == 1:
         modelPath = "savedModels/" + str(input("Input folder name:\n"))
 
+    modelPath, startTime = initModelFolder(modelPath, loadedModelName, model_in_subfolder)
 
-    model = Model(guiEnabled, viewEnabled, parameters, True)
-    if parameters.JOB_TRAINING_STEPS != 0 and parameters.JOB_STEP_START > 0:
-        model.loadModel(loadedModelName)
-        print("Loaded into load path: " + model.getPath())
-
-    else:
-        model.initModelFolder(modelPath, loadedModelName, model_in_subfolder)
-        print("Created new path: " + model.getPath())
+    print("Created new path: " + modelPath)
 
     if tweakedTotal:
-        modifyParameterValue(tweakedTotal, model)
+        modifyParameterValue(tweakedTotal, modelPath)
 
     numberOfHumans = 0
-    mouseEnabled = True
-    humanTraining = False
     if guiEnabled and viewEnabled:
         numberOfHumans = int(input("Please enter the number of human players: (" + str(MAXHUMANPLAYERS) + " max)\n"))
-        if fitsLimitations(numberOfHumans, MAXHUMANPLAYERS):
-            createHumans(numberOfHumans, model)
-            if 2 >= numberOfHumans > 0:
-                humanTraining = int(input("Do you want to train the network using human input? (1 == yes)\n"))
-                mouseEnabled = not humanTraining
-            if numberOfHumans > 0 and not humanTraining:
-                mouseEnabled = int(input("Do you want control Player1 using the mouse? (1 == yes)\n"))
+
+    numWorkers = 1
+    if numberOfHumans == 0:
+        numWorkers = int(input("Number of concurrent games? (1 == yes)\n"))
+        if numWorkers <= 0:
+            print("Number of concurrent games must be a positive integer.")
+            quit()
+
+    enableTrainMode = int(input("Do you want to train the network?: (1 == yes)\n"))
+
+    if guiEnabled and viewEnabled and not numberOfHumans > 0:
+        spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
+
+    mp.Pool(numWorkers)
+
+    testResults = []
+    testResults = updateTestResults(testResults, modelPath, parameters)
+    meanMassesOfTestResults = [val[0] for val in testResults]
+    exportTestResults(meanMassesOfTestResults, model.getPath() + "data/", "testMassOverTime")
+    meanMassesOfPelletResults = [val[2] for val in testResults]
+    exportTestResults(meanMassesOfPelletResults, model.getPath() + "data/", "Pellet_CollectionMassOverTime")
+    plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Test", 0)
+    plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection", 2)
+
+    if parameters.MULTIPLE_BOTS_PRESENT:
+        meanMassesOfGreedyResults = [val[4] for val in testResults]
+        exportTestResults(meanMassesOfGreedyResults, model.getPath() + "data/", "VS_1_GreedyMassOverTime")
+        plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy", 4)
+    if parameters.VIRUS_SPAWN:
+        meanMassesOfPelletVirusResults = [val[6] for val in testResults]
+        exportTestResults(meanMassesOfPelletVirusResults, model.getPath() + "data/", "Pellet_Collection_Virus_MassOverTime")
+        plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection_with_Viruses", 6)
+        if parameters.MULTIPLE_BOTS_PRESENT:
+            meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
+            exportTestResults(meanMassesOfGreedyVirusResults, model.getPath() + "data/", "VS_1_Greedy_Virus_MassOverTime")
+            plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
 
 
-    enableTrainMode = humanTraining if humanTraining is not None else False
-    if not humanTraining:
-        enableTrainMode = int(input("Do you want to train the network?: (1 == yes)\n"))
-    model.setTrainingEnabled(enableTrainMode == 1)
-
-    parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
-    numberOfNNBots = parameters.NUM_NN_BOTS
-    numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
-    numberOfBots = numberOfNNBots + numberOfGreedyBots
-
-    Bot.init_exp_replayer(parameters, loadedModelName)
-
-    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
-
-    createBots(numberOfNNBots, model, "NN", parameters, algorithm, loadModel)
-    createBots(numberOfGreedyBots, model, "Greedy", parameters)
-    createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
-    model.addDataFilesToDictionary()
-
-    if guiEnabled and viewEnabled and not model.hasHuman():
-        spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n"))
-        if spectate == 1:
-            model.addPlayerSpectator()
-
-    if numberOfNNBots == 0:
-        model.setTrainingEnabled(False)
-
-    if numberOfBots == 0 and not viewEnabled:
-        modelMustHavePlayers()
-
-    model.initialize(loadModel)
-
-    screenWidth, screenHeight = defineScreenSize(numberOfHumans)
-
-    testResults = None
-    if guiEnabled:
-        view = View(model, screenWidth, screenHeight, parameters)
-        controller = Controller(model, viewEnabled, view, mouseEnabled)
-        view.draw()
-        while controller.running:
-            controller.process_input()
-            model.update()
-    else:
-        maxSteps = parameters.MAX_SIMULATION_STEPS
-        jobSteps = maxSteps if parameters.JOB_SIMULATION_STEPS == 0 else parameters.JOB_SIMULATION_STEPS
-        jobStart = parameters.JOB_STEP_START
-        smallPart = max(int(maxSteps / 100), 1) # constitutes one percent of total training time
-        testPercentage = smallPart * 5
-        if jobStart == 0:
-            testResults = []
-        else:
-            print("max:", maxSteps, "start:", jobStart, "steps:", jobSteps)
-            with open(model.getPath() + 'testResults.pkl', 'rb') as inputFile:
-                testResults = pkl.load(inputFile)
-        for step in range(jobStart, jobStart + jobSteps):
-            model.update()
-            if step % smallPart == 0 and step != 0:
-                print("Trained: ", round(step / maxSteps * 100, 1), "%")
-                # Test every 5% of training
-            if parameters.ENABLE_TESTING:
-                if step % testPercentage == 0:
-                    testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
-
-        jobStart_line = checkValidParameter("JOB_STEP_START")
-        epsilon_line = checkValidParameter("EPSILON")
-        endParams = []
-        endParams.append(["JOB_STEP_START", jobStart + jobSteps, jobStart_line])
-        endParams.append(["EPSILON", model.getBots()[0].getLearningAlg().getNoise(), epsilon_line])
-        modifyParameterValue(endParams, model)
-
-        if parameters.ENABLE_TESTING and parameters.JOB_TRAINING_STEPS == 0 or \
-                parameters.JOB_SIMULATION_STEPS + parameters.JOB_STEP_START >= parameters.MAX_SIMULATION_STEPS:
-            testResults = updateTestResults(testResults, model, 100, parameters)
-            meanMassesOfTestResults = [val[0] for val in testResults]
-            exportTestResults(meanMassesOfTestResults, model.getPath() + "data/", "testMassOverTime")
-            meanMassesOfPelletResults = [val[2] for val in testResults]
-            exportTestResults(meanMassesOfPelletResults, model.getPath() + "data/", "Pellet_CollectionMassOverTime")
-            plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Test", 0)
-            plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection", 2)
-            
-            if parameters.MULTIPLE_BOTS_PRESENT:
-                meanMassesOfGreedyResults = [val[4] for val in testResults]
-                exportTestResults(meanMassesOfGreedyResults, model.getPath() + "data/", "VS_1_GreedyMassOverTime")
-                plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy", 4)
-            if parameters.VIRUS_SPAWN:
-                meanMassesOfPelletVirusResults = [val[6] for val in testResults]
-                exportTestResults(meanMassesOfPelletVirusResults, model.getPath() + "data/", "Pellet_Collection_Virus_MassOverTime")
-                plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection_with_Viruses", 6)
-                if parameters.MULTIPLE_BOTS_PRESENT:
-                    meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
-                    exportTestResults(meanMassesOfGreedyVirusResults, model.getPath() + "data/", "VS_1_Greedy_Virus_MassOverTime")
-                    plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
-
-
-            print("Training done.")
-            print("")
+        print("Training done.")
+        print("")
 
     if model.getTrainingEnabled():
         model.save(True)
         model.saveModels()
-        if parameters.JOB_TRAINING_STEPS == 0 or \
-                parameters.JOB_SIMULATION_STEPS + parameters.JOB_STEP_START >= parameters.MAX_SIMULATION_STEPS:
+        runTests(model, parameters)
+        if model_in_subfolder:
+            print(os.path.join(modelPath))
+            createCombinedModelGraphs(os.path.join(modelPath))
 
-            runTests(model, parameters)
-            if model_in_subfolder:
-                print(os.path.join(modelPath))
-                createCombinedModelGraphs(os.path.join(modelPath))
+        print("Total average time per update: ", round(numpy.mean(model.timings), 5))
 
-            print("Total average time per update: ", round(numpy.mean(model.timings), 5))
-
-            bots = model.getBots()
-            for bot_idx, bot in enumerate([bot for bot in model.getBots() if bot.getType() == "NN"]):
-                player = bot.getPlayer()
-                print("")
-                print("Network parameters for ", player, ":")
-                attributes = dir(parameters)
-                for attribute in attributes:
-                    if not attribute.startswith('__'):
-                        print(attribute, " = ", getattr(parameters, attribute))
-                print("")
-                print("Mass Info for ", player, ":")
-                massListPath = model.getPath() + "/data/" +  model.getDataFiles()["NN" + str(bot_idx) + "_mass"]
-                with open(massListPath, 'r') as f:
-                    massList = list(map(float, f))
-                mean = numpy.mean(massList)
-                median = numpy.median(massList)
-                variance = numpy.std(massList)
-                print("Median = ", median, " Mean = ", mean, " Std = ", variance)
-                print("")
-        elif testResults is not None:
-            with open(model.getPath() + "replay_buffer.pkl", 'wb') as output:
-                print(len(model.getBots()[0].getExpReplayer()), "buffLength")
-                pkl.dump(model.getBots()[0].getExpReplayer(), output, pkl.HIGHEST_PROTOCOL)
-            with open(model.getPath() + "testResults.pkl", 'wb') as output:
-                pkl.dump(testResults, output, pkl.HIGHEST_PROTOCOL)
-
-            submitNewJob(model.getPath())
+        for bot_idx, bot in enumerate([bot for bot in model.getBots() if bot.getType() == "NN"]):
+            player = bot.getPlayer()
+            print("")
+            print("Network parameters for ", player, ":")
+            attributes = dir(parameters)
+            for attribute in attributes:
+                if not attribute.startswith('__'):
+                    print(attribute, " = ", getattr(parameters, attribute))
+            print("")
+            print("Mass Info for ", player, ":")
+            massListPath = model.getPath() + "/data/" +  model.getDataFiles()["NN" + str(bot_idx) + "_mass"]
+            with open(massListPath, 'r') as f:
+                massList = list(map(float, f))
+            mean = numpy.mean(massList)
+            median = numpy.median(massList)
+            variance = numpy.std(massList)
+            print("Median = ", median, " Mean = ", mean, " Std = ", variance)
+            print("")
 
 if __name__ == '__main__':
     run()
