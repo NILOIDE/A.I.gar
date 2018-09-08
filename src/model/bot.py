@@ -1,52 +1,6 @@
 import numpy
 from .parameters import *
 from .spatialHashTable import spatialHashTable
-from .replay_buffer import PrioritizedReplayBuffer, ReplayBuffer
-import pickle as pkl
-
-
-class ExpReplay:
-    # TODO: extend with prioritized replay based on td_error. Make new specialized functions for this
-    def __init__(self, parameters):
-        self.memories = []
-        self.max = parameters.MEMORY_CAPACITY
-        self.batch_size = parameters.MEMORY_BATCH_LEN
-        self.parameters = parameters
-
-    def remember(self, new_exp):
-        if len(self.memories) >= self.max:
-            del self.memories[0]
-        self.memories.append(new_exp)
-
-    def canReplay(self):
-        return len(self.memories) >= self.batch_size
-
-    def generateTrace(self, experience):
-        pass
-
-    def sample(self):
-        if self.parameters.NEURON_TYPE == "MLP":
-            randIdxs = numpy.random.randint(0, len(self.memories), self.batch_size)
-            return [self.memories[idx] for idx in randIdxs]
-        elif self.parameters.NEURON_TYPE == "LSTM":
-            trace_len = self.parameters.MEMORY_TRACE_LEN
-            sampled_start_points = numpy.random.randint(0, len(self.memories) - trace_len, self.batch_size)
-            sampled_traces = []
-            for start_point in sampled_start_points:
-                # Check that the trace does not contain any states in which the bot is dead and no states which are directly before a reset
-                valid_start = False
-                while not valid_start:
-                    valid_start = True
-                    for candidate in range(start_point, start_point + trace_len - 1):
-                        if self.memories[candidate][-2] is None or self.memories[candidate][-1] == True:
-                            valid_start = False
-                    if not valid_start:
-                        start_point = numpy.random.randint(0, len(self.memories) - trace_len)
-                sampled_traces.append(self.memories[start_point:start_point + trace_len])
-            return sampled_traces
-
-    def getMemories(self):
-        return self.memories
 
 
 def isCellData(cell):
@@ -72,18 +26,6 @@ class Bot(object):
     _randomId = 0
     num_NNbots = 0
     num_Greedybots = 0
-
-    @classmethod
-    def init_exp_replayer(cls, parameters, path):
-        cls.expReplayer = None
-        if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-            cls.expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA,
-                                                      parameters.MEMORY_BETA)
-        else:
-            cls.expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
-
-
-
 
     @property
     def randomId(self):
@@ -112,7 +54,7 @@ class Bot(object):
     def __repr__(self):
         return self.type + str(self.id)
 
-    def __init__(self, player, field, bot_type, trainMode, learningAlg, parameters, rgbGenerator=None):
+    def __init__(self, player, field, bot_type, learningAlg, parameters, rgbGenerator=None):
         if bot_type == "Greedy":
             self.id = self.greedyId
             self.greedyId += 1
@@ -122,8 +64,9 @@ class Bot(object):
         elif bot_type == "Random":
             self.id = self.randomId
             self.randomId += 1
+        self.experiences = []
         self.rgbGenerator = rgbGenerator
-        self.trainMode = trainMode
+        self.gatherExperiences = parameters.GATHER_EXP
         self.parameters = parameters
         self.learningAlg = None
         self.lastMass = None
@@ -134,11 +77,12 @@ class Bot(object):
         self.currentAction = None
         if learningAlg is not None:
             self.learningAlg = learningAlg
-            # If Actor-Critic we use continuous actions
-            self.trainMode = trainMode
-            if not self.trainMode:
-                self.learningAlg.setNoise(0)
-                self.learningAlg.setTemperature(0)
+        # TODO: is this needed?
+        #     # If Actor-Critic we use continuous actions
+        #     self.trainMode = trainMode
+        #     if not self.gatherExperiences:
+        #         self.learningAlg.setNoise(0)
+        #         self.learningAlg.setTemperature(0)
 
         self.type = bot_type
         self.player = player
@@ -191,12 +135,10 @@ class Bot(object):
             self.learningAlg.reset()
         self.lastMass = None
         self.oldState = None
-        # self.stateHistory = []
         self.lastMemory = None
         self.skipFrames = 0
         self.cumulativeReward = 0
         self.lastReward = 0
-        # self.rewardHistory = []
         self.rewardAvgOfEpisode = 0
         self.rewardLenOfEpisode = 0
         self.currentlySkipping = False
@@ -263,24 +205,20 @@ class Bot(object):
 
         if not self.currentlySkipping:
             newState = self.getStateRepresentation()
-            
-            # Learn
-            if self.trainMode and self.oldState is not None:
+
+            if self.gatherExperiences and self.oldState is not None:
                 self.time += 1
                 action = self.currentActionIdx if self.learningAlg.discrete else self.currentAction
-
-                if self.parameters.EXP_REPLAY_ENABLED:
+                if self.gatherExperiences:
                     if str(self.learningAlg) != "Q-learning":
                         if self.parameters.ACTOR_CRITIC_TYPE == "CACLA":
                             # Save raw action without noise in "done" field to later determine difference in policies
-                            self.expReplayer.add(self.oldState, action, self.lastReward, newState, self.currentRawAction)
+                            self.experiences.append((self.oldState, action, self.lastReward, newState, self.currentRawAction))
                         else:
                             # Save None for SPG in "done" field. This will be later updated with the best sampled action
-                            self.expReplayer.add(self.oldState, action, self.lastReward, newState, None)
+                            self.experiences.append((self.oldState, action, self.lastReward, newState, None))
                     else:
-                        self.expReplayer.add(self.oldState, action, self.lastReward, newState, newState is None)
-
-                self.learningAlg.updateNoise()
+                        self.experiences.append((self.oldState, action, self.lastReward, newState, None))
                 self.lastMemory = ([self.oldState], [action], [self.lastReward], [newState], [newState is not None])
 
                 if self.player.getSelected():
@@ -304,6 +242,7 @@ class Bot(object):
 
     def setMassesOverTime(self, array):
         self.totalMasses = array
+
 
     def make_random_bot_move(self):
         if self.time % self.parameters.FRAME_SKIP_RATE == 0:
@@ -789,5 +728,6 @@ class Bot(object):
     def getGridSquaresPerFov(self):
         return self.getGridSquaresPerFov()
 
-    def getExpReplayer(self):
-        return self.expReplayer
+    def getExperiences(self):
+        return self.experiences
+

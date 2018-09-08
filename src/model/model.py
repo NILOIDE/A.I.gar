@@ -48,14 +48,14 @@ def display_top(snapshot, key_type='lineno', limit=3):
 # It links the actions of the players to consequences in the field and updates information.
 
 class Model(object):
-    def __init__(self, guiEnabled, viewEnabled, parameters, trainingEnabled, testingModel = False):
+    def __init__(self, guiEnabled, viewEnabled, parameters, testingModel = False):
         self.listeners = []
         self.viewEnabled = viewEnabled
         self.guiEnabled = guiEnabled
         self.parameters = parameters
         self.virusEnabled = parameters.VIRUS_SPAWN
         self.resetLimit = parameters.RESET_LIMIT
-        self.trainingEnabled = trainingEnabled
+        self.trainingEnabled = False
         self.path = None
         self.superPath = None
         self.startTime = None
@@ -558,7 +558,7 @@ class Model(object):
         if parameters is not None:
             if parameters.CNN_REPR and parameters.CNN_P_REPR:
                 rgbGenerator = RGBGenerator(self.field, parameters)
-        bot = Bot(newPlayer, self.field, botType, self.trainingEnabled, learningAlg, parameters, rgbGenerator)
+        bot = Bot(newPlayer, self.field, botType, learningAlg, parameters, rgbGenerator)
         self.addBot(bot)
 
     def createHuman(self, name):
@@ -610,6 +610,9 @@ class Model(object):
         for bot in self.bots:
             if bot.getType() == "NN":
                 return bot
+
+    def getNNBots(self):
+        return [bot for bot in self.bots if bot.getType == "NN"]
 
     def getPath(self):
         return self.path

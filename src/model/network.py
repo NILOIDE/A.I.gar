@@ -1,5 +1,3 @@
-import heapq
-
 import numpy
 numpy.set_printoptions(threshold=numpy.nan)
 
@@ -81,7 +79,7 @@ class Network(object):
 
         self.loadedModelName = None
 
-        self.gpus = self.parameters.GPUS
+        self.gpus = self.parameters.NUM_GPUS
 
         # Q-learning
         self.discount = self.parameters.DISCOUNT

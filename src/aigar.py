@@ -1,5 +1,7 @@
 import os
+import sys
 import importlib
+import importlib.util
 import shutil
 import time
 import datetime
@@ -9,22 +11,26 @@ from model.qLearning import *
 from model.actorCritic import *
 from model.bot import *
 from model.model import Model
+from model.expReplay import ExpReplay
+from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
-import pickle as pkl
-import subprocess
 from builtins import input
 import pathos.multiprocessing as mp
+from multiprocessing import Process
+
 from time import sleep
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
 
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 import random as rn
 
 
 def fix_seeds(seedNum):
+    import tensorflow as tf
+
     # The below is necessary in Python 3.2.3 onwards to
     # have reproducible behavior for certain hash-based operations.
     # See these references for further details:
@@ -322,6 +328,11 @@ def defineScreenSize(humansNr):
     return SCREEN_WIDTH, SCREEN_HEIGHT
 
 
+def createNetwork(parameters, path, name=""):
+    network = Network(parameters)
+    network.saveModel(path, name)
+
+
 def createHumans(numberOfHumans, model1):
     for i in range(numberOfHumans):
         name = input("Player" + str(i + 1) + " name:\n")
@@ -355,17 +366,14 @@ def createBots(number, model, botType, parameters, algorithm=None, loadModel=Non
 
 
 def performTest(testParams, testSteps):
+    testModel = Model(False, False, testParams)
+    createModelPlayers(testParams, testModel, 0)
 
-    testModel = Model(False, False, testParams, False)
-    # pelletModel.createBot("NN", currentAlg, parameters)
-    # TODO: Change to NN bots
-    createBots(testParams.NUM_NN_BOTS, testModel, "Greedy", testParams,0)
-
-    bots = testModel.getBots()
     testModel.initialize(False)
     for step in range(testSteps):
         testModel.update()
 
+    bots = testModel.getBots()
     massOverTime = [bot.getMassOverTime() for bot in bots]
     meanMass = numpy.mean([numpy.mean(botMass) for botMass in massOverTime])
     maxMeanMass = numpy.max(meanMass)
@@ -382,7 +390,7 @@ def performTest(testParams, testSteps):
     return [massOverTime, meanMass, maxMass]
 
 
-def testModel(n_tests, testSteps, modelPath, name, testParams=None):
+def testModel(path, name, testParams=None):
     print("Testing", name, "...")
     start = time.time()
 
@@ -392,6 +400,8 @@ def testModel(n_tests, testSteps, modelPath, name, testParams=None):
     #     currentEval.append(performTest(testParams, testSteps))
 
     # Parallel testing
+    n_tests = testParams.DUR_TRAIN_TEST_NUM
+    testSteps = testParams.RESET_LIMIT
     pool = mp.Pool(n_tests)
     testResults = pool.starmap(performTest, [(testParams, testSteps) for process in range(n_tests)])
     print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
@@ -433,7 +443,7 @@ def testModel(n_tests, testSteps, modelPath, name, testParams=None):
     return name, maxScore, meanScore, stdMean, meanMaxScore, stdMax
 
 
-def updateTestResults(testResults, modelPath, parameters):
+def updateTestResults(testResults, modelPath, parameters, packageName):
     # currentAlg = model.getNNBot().getLearningAlg()
     # originalNoise = currentAlg.getNoise()
     # currentAlg.setNoise(0)
@@ -444,27 +454,27 @@ def updateTestResults(testResults, modelPath, parameters):
     #     currentAlg.setTemperature(0)
 
     # TODO: Perform all test kinds simultaneously
-    n_tests = parameters.DUR_TRAIN_TEST_NUM
 
-    currentEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "test", parameters)
+    testParams = createTestParams(packageName)
+    currentEval = testModel(modelPath, "test", testParams)
 
-    pelletTestParams = modifyParameters(parameters, False)
-    pelletEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "pellet", pelletTestParams)
+    pelletTestParams = createTestParams(packageName, False)
+    pelletEval = testModel(modelPath, "pellet", pelletTestParams)
 
     vsGreedyEval = (0, 0, 0, 0)
     virusGreedyEval = (0, 0, 0, 0)
     virusEval = (0, 0, 0, 0)
 
     if parameters.MULTIPLE_BOTS_PRESENT:
-        greedyTestParams = modifyParameters(parameters, False, 1, 1)
-        vsGreedyEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "vsGreedy", greedyTestParams)
+        greedyTestParams = createTestParams(packageName, False, 1, 1)
+        vsGreedyEval = testModel(modelPath, "vsGreedy", greedyTestParams)
 
     if parameters.VIRUS_SPAWN:
-        virusTestParams = modifyParameters(parameters, True)
-        virusEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "pellet_with_virus", virusTestParams)
+        virusTestParams = createTestParams(packageName, True)
+        virusEval = testModel(modelPath, "pellet_with_virus", virusTestParams)
         if parameters.MULTIPLE_BOTS_PRESENT:
-            virusGreedyTestParams = modifyParameters(parameters, True, 1, 1)
-            virusGreedyEval = testModel(n_tests, parameters.RESET_LIMIT, modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
+            virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
+            virusGreedyEval = testModel(modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
 
     # TODO: Check if following commented noise code is needed
     # currentAlg.setNoise(originalNoise)
@@ -479,9 +489,19 @@ def updateTestResults(testResults, modelPath, parameters):
     return testResults
 
 
-def modifyParameters(parameters, virus, num_nn_bots=1, num_greedy_bots=0, num_rand_bots=0):
-    testParameters = parameters
-    testParameters.VIRUS_SPAWN = virus
+def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, num_rand_bots=0):
+    # Create a copy of the networkParameters module import without
+    # overwriting the already-existing global networkParameters module
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=packageName)
+    testParameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(testParameters)
+    del SPEC_OS
+
+    # Change parameters in testParameters module
+    # TODO: Change test's RESET_LIMIT to 0? (Would get rid of resetting at the end of episode)
+    testParameters.GATHER_EXP = False
+    if virus != None:
+        testParameters.VIRUS_SPAWN = virus
     testParameters.NUM_NN_BOTS = num_nn_bots
     testParameters.NUM_GREEDY_BOTS = num_greedy_bots
     testParameters.NUM_RAND_BOTS = num_rand_bots
@@ -579,14 +599,11 @@ def runTests(model, parameters):
         file.write(data)
 
 
-def modelPlayers(parameters, model, numberOfHumans, algorithm, loadModel):
-    parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
+def createModelPlayers(parameters, model, algorithm, loadModel=None, numberOfHumans=0 ):
+    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
     numberOfNNBots = parameters.NUM_NN_BOTS
     numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
     numberOfBots = numberOfNNBots + numberOfGreedyBots
-
-    if numberOfNNBots == 0:
-        model.setTrainingEnabled(False)
 
     if numberOfBots == 0 and not model.viewEnabled:
         modelMustHavePlayers()
@@ -595,6 +612,17 @@ def modelPlayers(parameters, model, numberOfHumans, algorithm, loadModel):
     createBots(numberOfNNBots, model, "NN", parameters, algorithm, loadModel)
     createBots(numberOfGreedyBots, model, "Greedy", parameters)
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
+
+
+def addExperiencesToBuffer(expReplayer, gatheredExperiences):
+    # if shape(gatheredExperiences)[1] =
+    for experienceList in gatheredExperiences:
+        print(np.shape(experienceList))
+        for experience in experienceList:
+            print(np.shape(experience))
+            # TODO: Make add method nicer by taking entire memory as argument?
+            expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
+    return expReplayer
 
 
 def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
@@ -612,7 +640,7 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
     if spectate == 1:
         model.addPlayerSpectator()
 
-    modelPlayers(parameters, model, numberOfHumans, algorithm, loadModel)
+    createModelPlayers(parameters, model, numberOfHumans, algorithm, loadModel)
 
     Bot.init_exp_replayer(parameters, loadedModelName)
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
@@ -643,30 +671,81 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
 
 
-def performModelSteps(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm):
-    model = Model(False, False, parameters, True)
-    model.setTrainingEnabled(enableTrainMode == 1)
-
-    modelPlayers(parameters, model, 0, algorithm, loadModel)
-
-    Bot.init_exp_replayer(parameters, loadedModelName)
-
-    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
-
+def performModelSteps(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm):
+    model = Model(False, False, parameters)
+    createModelPlayers(parameters, model, algorithm, loadModel)
+    # TODO: Is this needed?
+    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
-
-    maxSteps = parameters.MAX_SIMULATION_STEPS
-    smallPart = max(int(maxSteps / 100), 1)  # constitutes one percent of total training time
-    testPercentage = smallPart * 5
-
-    for step in range(maxSteps):
+    for step in range(parameters.RESET_LIMIT):
         model.update()
-        if step % smallPart == 0 and step != 0:
-            print("Trained: ", round(step / maxSteps * 100, 1), "%")
-            # Test every 5% of training
-        if parameters.ENABLE_TESTING:
-            if step % testPercentage == 0:
-                testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
+    return [bot.getExperiences() for bot in model.getBots()]
+
+
+def trainOnExperienceBatch(parameters, path, batch):
+    pass
+
+
+def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName, algorithm):
+    numWorkers = parameters.NUM_CONCURRENT_GAMES
+    if numWorkers <= 0:
+        print("Number of concurrent games must be a positive integer.")
+        quit()
+    # TODO: check if I implemented ExpReplayer correctly
+    if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+        expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
+    else:
+        expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
+
+    # TODO: Uncomment for Anton's LSTM expReplay stuff
+    # expReplayer = ExpReplay(parameters)
+
+    experienceCollectors = mp.Pool(numWorkers)
+    # Initial testing (train steps at 0%)
+    testResults = updateTestResults(testResults, path, parameters, packageName)
+    # Gather initial experiences
+    print("Beggining to train...\n")
+    gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
+                                                                    loadModel, path, algorithm) for process in range(numWorkers)])
+    # Add experiences to experience buffer
+    # TODO: add experinces within subprocesses (problem is that they will not be appended in order)
+    # TODO: can experiences be added in batch in Prioritized Replay Buffer?
+    print("Shape:", np.shape(gatheredExperiences))
+    # print("Exps:", gatheredExperiences)
+    expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
+
+    # Perform simultaneous experiencing and training
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)
+    currentPart = 0
+    testPercentage = smallPart * 5
+    currentTestPercentage = 0
+    stepChunk = parameters.RESET_LIMIT * parameters.NUM_CONCURRENT_GAMES
+    for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
+        # Check if 1% of training time has elapsed
+        if step >= currentPart + smallPart:
+            currentPart = step - (step % smallPart)
+            print("Trained: ", step - (step % smallPart), "%")
+        # Check if it is time for testing (5% training time)
+        if step >= currentTestPercentage + testPercentage:
+            currentTestPercentage = step - (step - testPercentage)
+            testResults = updateTestResults(testResults, path, parameters, packageName)
+        # Create training processes
+        trainers = []
+        memoryBatch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
+        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, memoryBatch)))
+        for trainer in trainers:
+            trainer.start()
+        # Use worker pool to collect experiences
+        gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder, loadModel, path, algorithm)
+                                                   for process in range(numWorkers)])
+        # Add experiences to experience replayer
+        expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
+        for trainer in trainers:
+            trainer.join()
+
+    return testResults
+
+
 
 
 def run():
@@ -741,7 +820,8 @@ def run():
             # model.setPath(modelName)
 
     if not loadModel:
-        parameters = importlib.import_module('.networkParameters', package="model")
+        packageName = "model"
+        parameters = importlib.import_module('.networkParameters', package=packageName)
 
         algorithm = int(input("What learning algorithm do you want to use?\n" + \
                               "'Q-Learning' == 0, 'Actor-Critic' == 2,\n"))
@@ -769,26 +849,28 @@ def run():
     if tweakedTotal:
         modifyParameterValue(tweakedTotal, modelPath)
 
+    # Initialize network while number of humans is determined
+    p = Process(target=createNetwork, args=(parameters, modelPath))
+    p.start()
+
+    # Determine number of humans
     numberOfHumans = 0
     if guiEnabled and viewEnabled:
         numberOfHumans = int(input("Please enter the number of human players: (" + str(MAXHUMANPLAYERS) + " max)\n"))
 
-    numWorkers = 1
-    if numberOfHumans == 0:
-        numWorkers = int(input("Number of concurrent games? (1 == yes)\n"))
-        if numWorkers <= 0:
-            print("Number of concurrent games must be a positive integer.")
-            quit()
-
-    enableTrainMode = int(input("Do you want to train the network?: (1 == yes)\n"))
-
     if guiEnabled and viewEnabled and not numberOfHumans > 0:
         spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
 
-    mp.Pool(numWorkers)
+    # End network init parallel process
+    p.join()
+
 
     testResults = []
-    testResults = updateTestResults(testResults, modelPath, parameters)
+    if numberOfHumans == 0:
+        testResults = trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName, algorithm)
+    else:
+        pass
+    quit()
     meanMassesOfTestResults = [val[0] for val in testResults]
     exportTestResults(meanMassesOfTestResults, model.getPath() + "data/", "testMassOverTime")
     meanMassesOfPelletResults = [val[2] for val in testResults]
