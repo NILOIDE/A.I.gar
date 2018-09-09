@@ -175,17 +175,11 @@ class QLearn(object):
                 targets[sample_idx], td_e = self.calculateTarget(old_s, a, r, new_s, alive)
             priorities[sample_idx] = td_e
 
-        if self.parameters.CNN_TOWER:
-            stateRepr = numpy.zeros((len(old_s), batch_len, 1, len(old_s[0]), len(old_s[0])))
-            for gridIdx, grid in enumerate(old_s):
-                stateRepr[gridIdx][0][0] = grid
-            inputs = list(stateRepr)
-
         self.network.trainOnBatch(inputs, targets, importance_weights)
 
         return idxs, priorities
 
-    def learn(self, batch, steps):
+    def learn(self, batch):
         idxs, priorities =  self.train(batch)
 
         self.latestTDerror = numpy.mean(priorities[-1])

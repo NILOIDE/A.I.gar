@@ -247,7 +247,7 @@ def algorithmNameToNumber(name):
     name = str(name)
     if name == "Q-learning":
         return 0
-    elif name == "AC":
+    elif name == "CACLA":
         return 2
     elif name == "Discrete ACLA":
         return 3
@@ -339,17 +339,19 @@ def createHumans(numberOfHumans, model1):
         model1.createHuman(name)
 
 
-def createBots(number, model, botType, parameters, algorithm=None, loadModel=None):
+def createBots(number, model, botType, parameters, loadPath=None):
+    algorithm = parameters.ALGORITHM
     learningAlg = None
-    loadPath = model.getPath() if loadModel else None
+    # loadPath = model.getPath() if loadModel else None
     if botType == "NN":
         Bot.num_NNbots = number
         networks = {}
         for i in range(number):
+            # TODO: Since bots only use the learnAlg for moving, we could make it into a separate class (or subclass)
             # Create algorithm instance
-            if algorithm == 0:
+            if algorithm == "Q-learning":
                 learningAlg = QLearn(parameters)
-            elif algorithm == 2:
+            elif algorithm == "CACLA":
                 learningAlg = ActorCritic(parameters)
             else:
                 print("Please enter a valid algorithm.\n")
@@ -365,9 +367,9 @@ def createBots(number, model, botType, parameters, algorithm=None, loadModel=Non
             model.createBot(botType, None, parameters)
 
 
-def performTest(testParams, testSteps):
+def performTest(path, testParams, testSteps):
     testModel = Model(False, False, testParams)
-    createModelPlayers(testParams, testModel, 0)
+    createModelPlayers(testParams, testModel, path)
 
     testModel.initialize(False)
     for step in range(testSteps):
@@ -403,7 +405,7 @@ def testModel(path, name, testParams=None):
     n_tests = testParams.DUR_TRAIN_TEST_NUM
     testSteps = testParams.RESET_LIMIT
     pool = mp.Pool(n_tests)
-    testResults = pool.starmap(performTest, [(testParams, testSteps) for process in range(n_tests)])
+    testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
     print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
     print("------------------------------------------------------------------\n")
 
@@ -599,7 +601,7 @@ def runTests(model, parameters):
         file.write(data)
 
 
-def createModelPlayers(parameters, model, algorithm, loadModel=None, numberOfHumans=0 ):
+def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
     # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
     numberOfNNBots = parameters.NUM_NN_BOTS
     numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
@@ -608,8 +610,9 @@ def createModelPlayers(parameters, model, algorithm, loadModel=None, numberOfHum
     if numberOfBots == 0 and not model.viewEnabled:
         modelMustHavePlayers()
 
-    createHumans(numberOfHumans, model)
-    createBots(numberOfNNBots, model, "NN", parameters, algorithm, loadModel)
+    if numberOfHumans != 0:
+        createHumans(numberOfHumans, model)
+    createBots(numberOfNNBots, model, "NN", parameters, path)
     createBots(numberOfGreedyBots, model, "Greedy", parameters)
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
@@ -671,9 +674,9 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
 
 
-def performModelSteps(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm):
+def performModelSteps(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath):
     model = Model(False, False, parameters)
-    createModelPlayers(parameters, model, algorithm, loadModel)
+    createModelPlayers(parameters, model, loadModel)
     # TODO: Is this needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
@@ -682,11 +685,20 @@ def performModelSteps(parameters, loadedModelName, model_in_subfolder, loadModel
     return [bot.getExperiences() for bot in model.getBots()]
 
 
-def trainOnExperienceBatch(parameters, path, batch):
-    pass
+def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk, algorithm):
+    # TODO: Use GPU
+    learningAlg = None
+    if algorithmNumberToName(algorithm) == "Q-Learning":
+        learningAlg = QLearn(parameters)
+    elif algorithmNumberToName(algorithm) == "CACLA":
+        learningAlg = ActorCritic(parameters)
+    learningAlg.initializeNetwork(parameters)
+    for step in stepChunk:
+        batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
+        learningAlg.learn(batch)
 
 
-def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName, algorithm):
+def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
     numWorkers = parameters.NUM_CONCURRENT_GAMES
     if numWorkers <= 0:
         print("Number of concurrent games must be a positive integer.")
@@ -706,7 +718,7 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     # Gather initial experiences
     print("Beggining to train...\n")
     gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
-                                                                    loadModel, path, algorithm) for process in range(numWorkers)])
+                                                                    loadModel, path) for process in range(numWorkers)])
     # Add experiences to experience buffer
     # TODO: add experinces within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
@@ -724,7 +736,8 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         # Check if 1% of training time has elapsed
         if step >= currentPart + smallPart:
             currentPart = step - (step % smallPart)
-            print("Trained: ", step - (step % smallPart), "%")
+            percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS
+            print("Trained: ", percentPrint, "%")
         # Check if it is time for testing (5% training time)
         if step >= currentTestPercentage + testPercentage:
             currentTestPercentage = step - (step - testPercentage)
@@ -732,17 +745,18 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         # Create training processes
         trainers = []
         memoryBatch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, memoryBatch)))
+        # TODO: put "algorithm" variable into networkParams and remove need for human input
+        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk, algorithm)))
         for trainer in trainers:
             trainer.start()
         # Use worker pool to collect experiences
         gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder, loadModel, path, algorithm)
                                                    for process in range(numWorkers)])
-        # Add experiences to experience replayer
-        expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
+
         for trainer in trainers:
             trainer.join()
-
+        # Add experiences to experience replayer
+        expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
     return testResults
 
 
@@ -823,8 +837,12 @@ def run():
         packageName = "model"
         parameters = importlib.import_module('.networkParameters', package=packageName)
 
-        algorithm = int(input("What learning algorithm do you want to use?\n" + \
-                              "'Q-Learning' == 0, 'Actor-Critic' == 2,\n"))
+        # If parameter file has no algorithm, input and write to parameter file
+        if parameters.ALGORITHM == "None":
+            algorithm = int(input("What learning algorithm do you want to use?\n" + \
+                                  "'Q-Learning' == 0, 'Actor-Critic' == 2,\n"))
+            modifyParameterValue([["ALGORITHM", algorithmNumberToName(algorithm), checkValidParameter("ALGORITHM")]], modelPath)
+
     tweaking = int(input("Do you want to tweak parameters? (1 == yes)\n"))
     tweakedTotal = []
     if tweaking == 1:
@@ -867,7 +885,7 @@ def run():
 
     testResults = []
     if numberOfHumans == 0:
-        testResults = trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName, algorithm)
+        testResults = trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
     else:
         pass
     quit()

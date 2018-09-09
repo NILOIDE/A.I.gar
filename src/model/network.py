@@ -1,5 +1,16 @@
+import keras
+
+keras.backend.set_image_dim_ordering('tf')
 import numpy
+
 numpy.set_printoptions(threshold=numpy.nan)
+import tensorflow as tf
+import keras.backend as K
+from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization
+from keras.models import Sequential
+from keras.utils.training_utils import multi_gpu_model
+from keras.models import load_model, save_model
+from keras.constraints import maxnorm
 
 from .parameters import *
 
@@ -57,15 +68,6 @@ def createDiscreteActionsSquare(numActions, enableSplit, enableEject):
 
 class Network(object):
     def __init__(self, parameters, modelName = None):
-        import keras
-        keras.backend.set_image_dim_ordering('tf')
-        import tensorflow as tf
-        import keras.backend as K
-        from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization
-        from keras.models import Sequential
-        from keras.utils.training_utils import multi_gpu_model
-        from keras.models import load_model, save_model
-        from keras.constraints import maxnorm
 
         self.parameters = parameters
 
@@ -382,8 +384,9 @@ class Network(object):
                                         bias_initializer=initializer, kernel_initializer=initializer))
             self.actionNetwork.compile(loss='mse', optimizer=optimizer)
 
-        print(self.valueNetwork.summary())
-        print("\n")
+        if __debug__:
+            print(self.valueNetwork.summary())
+            print("\n")
 
         if modelName is not None:
             self.load(modelName)
