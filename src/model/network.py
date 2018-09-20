@@ -1,4 +1,5 @@
 import keras
+import os
 
 keras.backend.set_image_dim_ordering('tf')
 import numpy
@@ -428,7 +429,7 @@ class Network(object):
     def load(self, modelName):
         path = modelName
         self.loadedModelName = modelName
-        self.valueNetwork = keras.models.load_model(path + "model.h5")
+        self.valueNetwork = keras.models.load_model(str(path) + "model.h5")
         self.targetNetwork = load_model(path + "model.h5")
 
 

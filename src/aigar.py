@@ -1,4 +1,5 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
 import sys
 import importlib
 import importlib.util
@@ -16,8 +17,8 @@ from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
 import pathos.multiprocessing as mp
-from multiprocessing import Process
-
+from multiprocessing import Process, Lock
+from multiprocessing.managers import BaseManager, NamespaceProxy
 from time import sleep
 
 from view.view import View
@@ -393,7 +394,9 @@ def performTest(path, testParams, testSteps):
 
 
 def testModel(path, name, testParams=None):
-    print("Testing", name, "...")
+    print("\nTesting", name, "...")
+    print("------------------------------------------------------------------\n")
+
     start = time.time()
 
     # Serial Testing
@@ -612,17 +615,16 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
 
     if numberOfHumans != 0:
         createHumans(numberOfHumans, model)
+
     createBots(numberOfNNBots, model, "NN", parameters, path)
     createBots(numberOfGreedyBots, model, "Greedy", parameters)
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
 
-def addExperiencesToBuffer(expReplayer, gatheredExperiences):
-    # if shape(gatheredExperiences)[1] =
+def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
+    print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences))
     for experienceList in gatheredExperiences:
-        print(np.shape(experienceList))
         for experience in experienceList:
-            print(np.shape(experience))
             # TODO: Make add method nicer by taking entire memory as argument?
             expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
     return expReplayer
@@ -674,57 +676,109 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
 
 
-def performModelSteps(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath):
+def performModelSteps(parameters, expReplayer, processNum, loadedModelName, model_in_subfolder, loadModel, modelPath):
+    # Create game instance
     model = Model(False, False, parameters)
-    createModelPlayers(parameters, model, loadModel)
+    createModelPlayers(parameters, model, modelPath)
     # TODO: Is this needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
-    for step in range(parameters.RESET_LIMIT):
+    # Run game
+    numCollectionEpisodes = parameters.NUM_EPISODE_PER_COLLECTION
+    for step in range(numCollectionEpisodes * parameters.RESET_LIMIT):
         model.update()
-    return [bot.getExperiences() for bot in model.getBots()]
+    print("Collector #" + str(processNum) + " has gathered " + str(numCollectionEpisodes) + " episodes worth of experiences.")
+    addExperiencesToBuffer(expReplayer, [bot.getExperiences() for bot in model.getBots()], processNum)
 
 
-def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk, algorithm):
-    # TODO: Use GPU
-    learningAlg = None
-    if algorithmNumberToName(algorithm) == "Q-Learning":
-        learningAlg = QLearn(parameters)
-    elif algorithmNumberToName(algorithm) == "CACLA":
-        learningAlg = ActorCritic(parameters)
-    learningAlg.initializeNetwork(parameters)
-    for step in stepChunk:
-        batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-        learningAlg.learn(batch)
-
-
-def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
+def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
     numWorkers = parameters.NUM_CONCURRENT_GAMES
     if numWorkers <= 0:
         print("Number of concurrent games must be a positive integer.")
         quit()
+    collectors = []
+    for processNum in range(numWorkers):
+        p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, loadedModelName,
+                                                                  model_in_subfolder, loadModel, path))
+        p.start()
+        collectors.append(p)
+
+    return collectors
+
+
+def terminateExperienceCollectors(collectors):
+    for p in collectors:
+        p.join()
+
+
+def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
+    # TODO: Use GPU
+    algorithmName = parameters.ALGORITHM
+    learningAlg = None
+    if algorithmName == "Q-learning":
+        learningAlg = QLearn(parameters)
+    elif algorithmName == "CACLA":
+        learningAlg = ActorCritic(parameters)
+    learningAlg.initializeNetwork(parameters)
+    for step in stepChunk:
+        batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
+        idxs, priorities, updated_actions = learningAlg.learn(batch)
+        if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+            expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
+            if parameters.OCACLA_REPLACE_TRANSITIONS:
+                if updated_actions is not None:
+                    expReplayer.update_dones(idxs, updated_actions)
+                else:
+                    print("Updated actions is None!")
+
+
+class MyManager(BaseManager): pass
+
+class TestProxy(NamespaceProxy):
+    _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__len__', 'add', 'sample', 'updatePriorities' )
+
+    def add(self, obs_t, action, reward, obs_tp1, done):
+        callmethod = object.__getattribute__(self, '_callmethod')
+        return callmethod(self.add.__name__, (obs_t, action, reward, obs_tp1, done))
+
+    def __len__(self):
+        callmethod = object.__getattribute__(self, '_callmethod')
+        return callmethod(self.__len__.__name__)
+
+def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
+
     # TODO: check if I implemented ExpReplayer correctly
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-        expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
+        MyManager.register('ExpReplayer', PrioritizedReplayBuffer, TestProxy)
+        manager = MyManager()
+        manager.start()
+        expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
+        # expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
     else:
-        expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
+        MyManager.register('ExpReplayer', ReplayBuffer, TestProxy)
+        manager = MyManager()
+        manager.start()
+        expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY)
+        # expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
+
 
     # TODO: Uncomment for Anton's LSTM expReplay stuff
     # expReplayer = ExpReplay(parameters)
 
-    experienceCollectors = mp.Pool(numWorkers)
+    # experienceCollectors = mp.Pool(numWorkers)
     # Initial testing (train steps at 0%)
     testResults = updateTestResults(testResults, path, parameters, packageName)
     # Gather initial experiences
     print("Beggining to train...\n")
-    gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
-                                                                    loadModel, path) for process in range(numWorkers)])
-    # Add experiences to experience buffer
-    # TODO: add experinces within subprocesses (problem is that they will not be appended in order)
+
+    # gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
+    #                                                                 loadModel, path) for process in range(numWorkers)])
+    collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
+    # TODO: experiences are being added within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
-    print("Shape:", np.shape(gatheredExperiences))
-    # print("Exps:", gatheredExperiences)
-    expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
+    # TODO: Don't terminate collectors, but make them wait instead so as to not have to re-initialize them every time
+    terminateExperienceCollectors(collectors)
+    print("Current replay buffer size: " ,len(expReplayer))
 
     # Perform simultaneous experiencing and training
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)
@@ -732,6 +786,7 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     testPercentage = smallPart * 5
     currentTestPercentage = 0
     stepChunk = parameters.RESET_LIMIT * parameters.NUM_CONCURRENT_GAMES
+    # TODO: Make process asynchronous (trainer signals collectors to re-load network)
     for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
         # Check if 1% of training time has elapsed
         if step >= currentPart + smallPart:
@@ -745,18 +800,16 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         # Create training processes
         trainers = []
         memoryBatch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-        # TODO: put "algorithm" variable into networkParams and remove need for human input
-        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk, algorithm)))
+        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk)))
         for trainer in trainers:
             trainer.start()
         # Use worker pool to collect experiences
-        gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder, loadModel, path, algorithm)
-                                                   for process in range(numWorkers)])
+        collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
 
         for trainer in trainers:
             trainer.join()
+        terminateExperienceCollectors(collectors)
         # Add experiences to experience replayer
-        expReplayer = addExperiencesToBuffer(expReplayer, gatheredExperiences)
     return testResults
 
 

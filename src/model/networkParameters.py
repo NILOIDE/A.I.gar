@@ -23,7 +23,7 @@ MEMORY_BETA = 0.4
 # General Training:
 ENABLE_TRAINING = True
 ENABLE_TESTING = True
-DUR_TRAIN_TEST_NUM = 10
+DUR_TRAIN_TEST_NUM = 2
 FINAL_TEST_LEN = 10
 FRAME_SKIP_RATE = 10
 MAX_TRAINING_STEPS = 50000
@@ -203,7 +203,8 @@ CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_CONCURRENT_GAMES = 3
+NUM_CONCURRENT_GAMES = 2
+NUM_EPISODE_PER_COLLECTION = 1 # How many episodes should be ran before collected experiences are pushed to buffer
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0
 TESTING_WORKER_POOL = DUR_TRAIN_TEST_NUM
