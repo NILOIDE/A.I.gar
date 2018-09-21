@@ -108,11 +108,12 @@ class Model(object):
         print("Resetting field and players!")
         self.field.reset()
         self.resetBots()
+        self.counter = 0
 
     def update(self):
         self.counter += 1
         # Reset the model after self.resetLimit steps:
-        if self.resetLimit > 0 and self.counter > 0 and  self.counter % self.resetLimit  == 0:
+        if self.resetLimit > 0 and self.counter > 0 and self.counter % self.resetLimit  == 0:
             self.resetModel()
 
         timeStart = time.time()

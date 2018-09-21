@@ -26,7 +26,8 @@ ENABLE_TESTING = True
 DUR_TRAIN_TEST_NUM = 2
 FINAL_TEST_LEN = 10
 FRAME_SKIP_RATE = 10
-MAX_TRAINING_STEPS = 50000
+TARGET_NETWORK_STEPS = 1500
+MAX_TRAINING_STEPS = 5000
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to maximize gpu effectiveness. 1 == train every step
 TRAINING_PHASE_LEN = 1 #TRAINING_WAIT_TIME / (FRAME_SKIP_RATE + 1) if TRAINING_WAIT_TIME >= FRAME_SKIP_RATE + 1 else 1
@@ -108,7 +109,6 @@ ACTIVATION_FUNC_HIDDEN = 'relu'
 ELU_ALPHA = 1 # TODO: only works for Q-learning so far. Test if it is useful, if so implement for others too
 ACTIVATION_FUNC_OUTPUT = 'linear'
 GRID_VIEW_ENABLED = True
-TARGET_NETWORK_STEPS = 1500
 USE_ACTION_AS_INPUT = False
 TD = 0
 Q_WEIGHT_DECAY    = 0#0.001 #0.001 L2 weight decay parameter. Set to 0 to disable
@@ -203,7 +203,8 @@ CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_CONCURRENT_GAMES = 2
+NUM_COLLECTORS = 2
+NUM_EXPS_BEFORE_TRAIN = 4000
 NUM_EPISODE_PER_COLLECTION = 1 # How many episodes should be ran before collected experiences are pushed to buffer
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0

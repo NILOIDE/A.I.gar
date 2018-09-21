@@ -457,7 +457,7 @@ def updateTestResults(testResults, modelPath, parameters, packageName):
     # if str(currentAlg) != "AC":
     #     originalTemp = currentAlg.getTemperature()
     #     currentAlg.setTemperature(0)
-
+    # TODO: All tests seems to be equal (randomization seed is the same?)
     # TODO: Perform all test kinds simultaneously
 
     testParams = createTestParams(packageName)
@@ -622,7 +622,7 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
 
 
 def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
-    print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences))
+    print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences), "\n")
     for experienceList in gatheredExperiences:
         for experience in experienceList:
             # TODO: Make add method nicer by taking entire memory as argument?
@@ -676,39 +676,42 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
 
 
-def performModelSteps(parameters, expReplayer, processNum, loadedModelName, model_in_subfolder, loadModel, modelPath):
+def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, loadModel, modelPath):
     # Create game instance
     model = Model(False, False, parameters)
     createModelPlayers(parameters, model, modelPath)
-    # TODO: Is this needed?
+    # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
-    # Run game
-    numCollectionEpisodes = parameters.NUM_EPISODE_PER_COLLECTION
-    for step in range(numCollectionEpisodes * parameters.RESET_LIMIT):
-        model.update()
-    print("Collector #" + str(processNum) + " has gathered " + str(numCollectionEpisodes) + " episodes worth of experiences.")
-    addExperiencesToBuffer(expReplayer, [bot.getExperiences() for bot in model.getBots()], processNum)
+    # Run game until terminated
+    while True:
+        # TODO: Remove 'resetModel() from model. Make resetting happen outside of model
+        for step in range(parameters.RESET_LIMIT):
+            model.update()
+        gatheredExperiences = [bot.getExperiences() for bot in model.getBots()]
+        # TODO: Shouldn't bot experiences be reset? (They currently are, but weren't before)
+        addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum)
 
 
 def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
-    numWorkers = parameters.NUM_CONCURRENT_GAMES
+    numWorkers = parameters.NUM_COLLECTORS
     if numWorkers <= 0:
         print("Number of concurrent games must be a positive integer.")
         quit()
     collectors = []
     for processNum in range(numWorkers):
-        p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, loadedModelName,
-                                                                  model_in_subfolder, loadModel, path))
+        p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, model_in_subfolder, loadModel, path))
         p.start()
         collectors.append(p)
-
     return collectors
 
 
 def terminateExperienceCollectors(collectors):
+    print("Terminating collectors...")
     for p in collectors:
-        p.join()
+        p.terminate()
+        if not p.is_alive():
+            p.join(timeout=0.001)
 
 
 def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
@@ -719,8 +722,11 @@ def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
         learningAlg = QLearn(parameters)
     elif algorithmName == "CACLA":
         learningAlg = ActorCritic(parameters)
-    learningAlg.initializeNetwork(parameters)
-    for step in stepChunk:
+    learningAlg.initializeNetwork(path)
+    if __debug__:
+        print("Current replay buffer size: ", len(expReplayer))
+    for step in range(stepChunk):
+        print("Current step: ", step, stepChunk)
         batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
         idxs, priorities, updated_actions = learningAlg.learn(batch)
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
@@ -735,6 +741,7 @@ def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
 class MyManager(BaseManager): pass
 
 class TestProxy(NamespaceProxy):
+    # TODO: Make compatible with Prioritized exp replay
     _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__len__', 'add', 'sample', 'updatePriorities' )
 
     def add(self, obs_t, action, reward, obs_tp1, done):
@@ -745,8 +752,11 @@ class TestProxy(NamespaceProxy):
         callmethod = object.__getattribute__(self, '_callmethod')
         return callmethod(self.__len__.__name__)
 
-def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
+    def sample(self, batch_size):
+        callmethod = object.__getattribute__(self, '_callmethod')
+        return callmethod(self.sample.__name__, (batch_size,))
 
+def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
     # TODO: check if I implemented ExpReplayer correctly
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         MyManager.register('ExpReplayer', PrioritizedReplayBuffer, TestProxy)
@@ -769,7 +779,7 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     # Initial testing (train steps at 0%)
     testResults = updateTestResults(testResults, path, parameters, packageName)
     # Gather initial experiences
-    print("Beggining to train...\n")
+    print("Beggining to initial experience collection...")
 
     # gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
     #                                                                 loadModel, path) for process in range(numWorkers)])
@@ -777,42 +787,42 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     # TODO: experiences are being added within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     # TODO: Don't terminate collectors, but make them wait instead so as to not have to re-initialize them every time
+    # Collect enough experiences before training
+    while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
+        sleep(0.000001)
     terminateExperienceCollectors(collectors)
     print("Current replay buffer size: " ,len(expReplayer))
+    print("\nBeggining to train...")
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     # Perform simultaneous experiencing and training
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)
     currentPart = 0
     testPercentage = smallPart * 5
     currentTestPercentage = 0
-    stepChunk = parameters.RESET_LIMIT * parameters.NUM_CONCURRENT_GAMES
-    # TODO: Make process asynchronous (trainer signals collectors to re-load network)
+    stepChunk = parameters.TARGET_NETWORK_STEPS
     for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
+        # TODO: Make training processes not join()
+        # Create training processes
+        trainers = []
+        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk)))
+        for trainer in trainers:
+            trainer.start()
+        # Use worker pool to collect experiences
+        collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
+        for trainer in trainers:
+            trainer.join()
+        terminateExperienceCollectors(collectors)
         # Check if 1% of training time has elapsed
         if step >= currentPart + smallPart:
             currentPart = step - (step % smallPart)
             percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS
             print("Trained: ", percentPrint, "%")
         # Check if it is time for testing (5% training time)
-        if step >= currentTestPercentage + testPercentage:
+        if parameters.ENABLE_TESTING and step >= currentTestPercentage + testPercentage:
             currentTestPercentage = step - (step - testPercentage)
             testResults = updateTestResults(testResults, path, parameters, packageName)
-        # Create training processes
-        trainers = []
-        memoryBatch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk)))
-        for trainer in trainers:
-            trainer.start()
-        # Use worker pool to collect experiences
-        collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
-
-        for trainer in trainers:
-            trainer.join()
-        terminateExperienceCollectors(collectors)
-        # Add experiences to experience replayer
     return testResults
-
-
 
 
 def run():
@@ -946,8 +956,8 @@ def run():
     exportTestResults(meanMassesOfTestResults, model.getPath() + "data/", "testMassOverTime")
     meanMassesOfPelletResults = [val[2] for val in testResults]
     exportTestResults(meanMassesOfPelletResults, model.getPath() + "data/", "Pellet_CollectionMassOverTime")
-    plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Test", 0)
-    plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection", 2)
+    plotTesting(testResults, modelPath, testPercentage, maxSteps, "Test", 0)
+    plotTesting(testResults, modelPath, testPercentage, maxSteps, "Pellet_Collection", 2)
 
     if parameters.MULTIPLE_BOTS_PRESENT:
         meanMassesOfGreedyResults = [val[4] for val in testResults]
@@ -966,7 +976,7 @@ def run():
         print("Training done.")
         print("")
 
-    if model.getTrainingEnabled():
+    if parameters.ENABLE_TRAINING:
         model.save(True)
         model.saveModels()
         runTests(model, parameters)

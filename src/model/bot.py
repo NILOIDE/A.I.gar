@@ -64,6 +64,7 @@ class Bot(object):
         elif bot_type == "Random":
             self.id = self.randomId
             self.randomId += 1
+        # TODO: What is the difference between memories and experiences?
         self.experiences = []
         self.rgbGenerator = rgbGenerator
         self.gatherExperiences = parameters.GATHER_EXP
@@ -197,6 +198,7 @@ class Bot(object):
         else:
             self.currentRawAction = extraInfo
 
+    # TODO: This function name should be changed
     def learn_and_move_NN(self):
         self.currentlySkipping = False
         if self.currentAction is not None:
@@ -233,6 +235,7 @@ class Bot(object):
             if self.player.getIsAlive():
                 self.lastMass = self.player.getTotalMass()
             else:
+                # TODO: This should probably be removed
                 self.reset()
 
 
