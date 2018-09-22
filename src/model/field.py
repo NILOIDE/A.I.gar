@@ -1,9 +1,8 @@
 import numpy
-import math
-import time
 from .cell import Cell
 from .parameters import *
 from .spatialHashTable import spatialHashTable
+import os
 
 
 # The Field class is the main field on which cells of all sizes will move
@@ -28,6 +27,7 @@ def randomSize():
 
 class Field(object):
     def __init__(self, virusEnabled):
+        numpy.random.seed(os.getpid()) # Set numpy seed to process ID, otherwise all subprocesses have same outcome
         self.size = 0
         self.pellets = []
         self.players = []

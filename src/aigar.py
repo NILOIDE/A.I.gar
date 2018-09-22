@@ -368,6 +368,7 @@ def createBots(number, model, botType, parameters, loadPath=None):
             model.createBot(botType, None, parameters)
 
 
+# Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
 def performTest(path, testParams, testSteps):
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, path)
@@ -393,6 +394,8 @@ def performTest(path, testParams, testSteps):
     return [massOverTime, meanMass, maxMass]
 
 
+# Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
+# The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
 def testModel(path, name, testParams=None):
     print("\nTesting", name, "...")
     print("------------------------------------------------------------------\n")
@@ -513,15 +516,16 @@ def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, 
     return testParameters
 
 
-def exportTestResults(testResults, path, name):
+# Export test result data into .txt files
+def exportResults(results, path, name):
     filePath = path + name + ".txt"
     with open(filePath, "a") as f:
-        for val in testResults:
+        for val in results:
             # write as: "mean\n"
             line = str(val) + "\n"
             f.write(line)
 
-
+# Plot test result and export plot to file with given name
 def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
     x = range(0, end + timeBetween, timeBetween)
     y = [x[idxOfMean] for x in testResults]
@@ -550,6 +554,31 @@ def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
     fig.savefig(path + title + ".pdf")
 
     plt.close()
+
+
+# Plot test results and export data
+def exportTestResults(testResults, path, parameters, testPercentage, maxSteps):
+    meanMassesOfTestResults = [val[0] for val in testResults]
+    exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
+    meanMassesOfPelletResults = [val[2] for val in testResults]
+    exportResults(meanMassesOfPelletResults, path + "data/", "Pellet_CollectionMassOverTime")
+    plotTesting(testResults, path, testPercentage, maxSteps, "Test", 0)
+    plotTesting(testResults, path, testPercentage, maxSteps, "Pellet_Collection", 2)
+
+    if parameters.MULTIPLE_BOTS_PRESENT:
+        meanMassesOfGreedyResults = [val[4] for val in testResults]
+        exportResults(meanMassesOfGreedyResults, path + "data/", "VS_1_GreedyMassOverTime")
+        plotTesting(testResults, path, testPercentage, maxSteps, "Vs_Greedy", 4)
+    if parameters.VIRUS_SPAWN:
+        meanMassesOfPelletVirusResults = [val[6] for val in testResults]
+        exportResults(meanMassesOfPelletVirusResults, path + "data/", "Pellet_Collection_Virus_MassOverTime")
+        plotTesting(testResults, path, testPercentage, maxSteps, "Pellet_Collection_with_Viruses", 6)
+        if parameters.MULTIPLE_BOTS_PRESENT:
+            meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
+            exportResults(meanMassesOfGreedyVirusResults, path + "data/", "VS_1_Greedy_Virus_MassOverTime")
+            plotTesting(testResults, path, testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
+
+
 
 def runTests(model, parameters):
     np.random.seed()
@@ -725,8 +754,8 @@ def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
     learningAlg.initializeNetwork(path)
     if __debug__:
         print("Current replay buffer size: ", len(expReplayer))
+        print("Steps before target network update: ", step, "Target network update interval: ", stepChunk)
     for step in range(stepChunk):
-        print("Current step: ", step, stepChunk)
         batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
         idxs, priorities, updated_actions = learningAlg.learn(batch)
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
@@ -756,6 +785,16 @@ class TestProxy(NamespaceProxy):
         callmethod = object.__getattribute__(self, '_callmethod')
         return callmethod(self.sample.__name__, (batch_size,))
 
+
+# Create the asynchronous training procedure.
+# The experience replay buffer is created as a multiprocessing.Manager. This manager takes form as the expReplay class
+# and is shared across all subprocesses. In order for subprocesses to access methods of the class, a Proxy manager needs
+# to be made.
+# The replay_buffer is first filled with enough experiences to begin training. Then, the training happens asynchronously
+# from the experience collection. 'N' amount of training processes are initialized and train while 'X' amount of
+# subprocesses collect experiences. After a given amount of training steps, collector subprocesses are killed and
+# re-initialized with a more up-to-date version of the network.
+# Every a certain amount of training, testing is done. This also happens with the training status being printed.
 def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
     # TODO: check if I implemented ExpReplayer correctly
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
@@ -780,10 +819,8 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     testResults = updateTestResults(testResults, path, parameters, packageName)
     # Gather initial experiences
     print("Beggining to initial experience collection...")
-
-    # gatheredExperiences = experienceCollectors.starmap(performModelSteps, [(parameters, loadedModelName, model_in_subfolder,
-    #                                                                 loadModel, path) for process in range(numWorkers)])
     collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
+
     # TODO: experiences are being added within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     # TODO: Don't terminate collectors, but make them wait instead so as to not have to re-initialize them every time
@@ -796,12 +833,13 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     # Perform simultaneous experiencing and training
-    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1) #Get int value closest to to 1% of training time
     currentPart = 0
-    testPercentage = smallPart * 5
+    testPercentage = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     currentTestPercentage = 0
     stepChunk = parameters.TARGET_NETWORK_STEPS
-    for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
+    maxSteps = parameters.MAX_TRAINING_STEPS
+    for step in range(0, maxSteps, stepChunk):
         # TODO: Make training processes not join()
         # Create training processes
         trainers = []
@@ -818,11 +856,15 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
             currentPart = step - (step % smallPart)
             percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS
             print("Trained: ", percentPrint, "%")
+        # TODO: make testing happen in parallel to training procedure
         # Check if it is time for testing (5% training time)
         if parameters.ENABLE_TESTING and step >= currentTestPercentage + testPercentage:
             currentTestPercentage = step - (step - testPercentage)
             testResults = updateTestResults(testResults, path, parameters, packageName)
-    return testResults
+
+    exportTestResults(testResults, path, parameters, testPercentage, maxSteps)
+    print("Training done.")
+    print("")
 
 
 def run():
@@ -948,33 +990,10 @@ def run():
 
     testResults = []
     if numberOfHumans == 0:
-        testResults = trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
+        trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
     else:
         pass
     quit()
-    meanMassesOfTestResults = [val[0] for val in testResults]
-    exportTestResults(meanMassesOfTestResults, model.getPath() + "data/", "testMassOverTime")
-    meanMassesOfPelletResults = [val[2] for val in testResults]
-    exportTestResults(meanMassesOfPelletResults, model.getPath() + "data/", "Pellet_CollectionMassOverTime")
-    plotTesting(testResults, modelPath, testPercentage, maxSteps, "Test", 0)
-    plotTesting(testResults, modelPath, testPercentage, maxSteps, "Pellet_Collection", 2)
-
-    if parameters.MULTIPLE_BOTS_PRESENT:
-        meanMassesOfGreedyResults = [val[4] for val in testResults]
-        exportTestResults(meanMassesOfGreedyResults, model.getPath() + "data/", "VS_1_GreedyMassOverTime")
-        plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy", 4)
-    if parameters.VIRUS_SPAWN:
-        meanMassesOfPelletVirusResults = [val[6] for val in testResults]
-        exportTestResults(meanMassesOfPelletVirusResults, model.getPath() + "data/", "Pellet_Collection_Virus_MassOverTime")
-        plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Pellet_Collection_with_Viruses", 6)
-        if parameters.MULTIPLE_BOTS_PRESENT:
-            meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
-            exportTestResults(meanMassesOfGreedyVirusResults, model.getPath() + "data/", "VS_1_Greedy_Virus_MassOverTime")
-            plotTesting(testResults, model.getPath(), testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
-
-
-        print("Training done.")
-        print("")
 
     if parameters.ENABLE_TRAINING:
         model.save(True)
