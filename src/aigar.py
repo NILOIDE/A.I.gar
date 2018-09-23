@@ -207,6 +207,7 @@ def createNamedPath(self, superName):
     print("Path: ", path)
     return path, startTime
 
+
 def copyParameters(path, loadedModelName = None):
     # Copy the simulation, NN and RL parameters so that we can load them later on
     if loadedModelName is None:
@@ -232,6 +233,7 @@ def setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, ena
         fix_seeds(seedNumber)
 
 
+# TODO: Remove the need for these two functions. make it so that algorithm type has to be set from parameters
 def algorithmNumberToName(val):
     if val == 0:
         return "Q-Learning"
@@ -402,6 +404,7 @@ def testModel(path, name, testParams=None):
 
     start = time.time()
 
+    # TODO: Parallel testing used to take as long as serial. Test this.
     # Serial Testing
     currentEval = []
     # for i in range(n_training):
@@ -410,6 +413,7 @@ def testModel(path, name, testParams=None):
     # Parallel testing
     n_tests = testParams.DUR_TRAIN_TEST_NUM
     testSteps = testParams.RESET_LIMIT
+    #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
     pool = mp.Pool(n_tests)
     testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
     pool.close()
@@ -451,51 +455,6 @@ def testModel(path, name, testParams=None):
     #     plot(masses, reset_time, 1, labels)
 
     return name, maxScore, meanScore, stdMean, meanMaxScore, stdMax
-
-
-def updateTestResults(testResults, modelPath, parameters, packageName):
-    # currentAlg = model.getNNBot().getLearningAlg()
-    # originalNoise = currentAlg.getNoise()
-    # currentAlg.setNoise(0)
-    #
-    # originalTemp = None
-    # if str(currentAlg) != "AC":
-    #     originalTemp = currentAlg.getTemperature()
-    #     currentAlg.setTemperature(0)
-    # TODO: Perform all test kinds simultaneously
-
-    testParams = createTestParams(packageName)
-    currentEval = testModel(modelPath, "test", testParams)
-
-    pelletTestParams = createTestParams(packageName, False)
-    pelletEval = testModel(modelPath, "pellet", pelletTestParams)
-
-    vsGreedyEval = (0, 0, 0, 0)
-    virusGreedyEval = (0, 0, 0, 0)
-    virusEval = (0, 0, 0, 0)
-
-    if parameters.MULTIPLE_BOTS_PRESENT:
-        greedyTestParams = createTestParams(packageName, False, 1, 1)
-        vsGreedyEval = testModel(modelPath, "vsGreedy", greedyTestParams)
-
-    if parameters.VIRUS_SPAWN:
-        virusTestParams = createTestParams(packageName, True)
-        virusEval = testModel(modelPath, "pellet_with_virus", virusTestParams)
-        if parameters.MULTIPLE_BOTS_PRESENT:
-            virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
-            virusGreedyEval = testModel(modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
-
-    # TODO: Check if following commented noise code is needed
-    # currentAlg.setNoise(originalNoise)
-    #
-    # if str(currentAlg) != "AC":
-    #     currentAlg.setTemperature(originalTemp)
-
-    meanScore = currentEval[2]
-    stdDev = currentEval[3]
-    testResults.append((meanScore, stdDev, pelletEval[2], pelletEval[3],
-                        vsGreedyEval[2], vsGreedyEval[3], virusEval[2], virusEval[3], virusGreedyEval[2], virusGreedyEval[3]))
-    return testResults
 
 
 def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, num_rand_bots=0):
@@ -581,6 +540,51 @@ def exportTestResults(testResults, path, parameters, testPercentage, maxSteps):
             plotTesting(testResults, path, testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
 
 
+def updateTestResults(testResults, modelPath, parameters, packageName):
+    # currentAlg = model.getNNBot().getLearningAlg()
+    # originalNoise = currentAlg.getNoise()
+    # currentAlg.setNoise(0)
+    #
+    # originalTemp = None
+    # if str(currentAlg) != "AC":
+    #     originalTemp = currentAlg.getTemperature()
+    #     currentAlg.setTemperature(0)
+    # TODO: Perform all test kinds simultaneously
+
+    testParams = createTestParams(packageName)
+    currentEval = testModel(modelPath, "test", testParams)
+
+    pelletTestParams = createTestParams(packageName, False)
+    pelletEval = testModel(modelPath, "pellet", pelletTestParams)
+
+    vsGreedyEval = (0, 0, 0, 0)
+    virusGreedyEval = (0, 0, 0, 0)
+    virusEval = (0, 0, 0, 0)
+
+    if parameters.MULTIPLE_BOTS_PRESENT:
+        greedyTestParams = createTestParams(packageName, False, 1, 1)
+        vsGreedyEval = testModel(modelPath, "vsGreedy", greedyTestParams)
+
+    if parameters.VIRUS_SPAWN:
+        virusTestParams = createTestParams(packageName, True)
+        virusEval = testModel(modelPath, "pellet_with_virus", virusTestParams)
+        if parameters.MULTIPLE_BOTS_PRESENT:
+            virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
+            virusGreedyEval = testModel(modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
+
+    # TODO: Check if following commented noise code is needed
+    # currentAlg.setNoise(originalNoise)
+    #
+    # if str(currentAlg) != "AC":
+    #     currentAlg.setTemperature(originalTemp)
+
+    meanScore = currentEval[2]
+    stdDev = currentEval[3]
+    testResults.append((meanScore, stdDev, pelletEval[2], pelletEval[3],
+                        vsGreedyEval[2], vsGreedyEval[3], virusEval[2], virusEval[3], virusGreedyEval[2], virusGreedyEval[3]))
+    return testResults
+
+
 
 def runTests(model, parameters):
     np.random.seed()
@@ -635,33 +639,6 @@ def runTests(model, parameters):
         file.write(data)
 
 
-def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
-    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
-    numberOfNNBots = parameters.NUM_NN_BOTS
-    numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
-    numberOfBots = numberOfNNBots + numberOfGreedyBots
-
-    if numberOfBots == 0 and not model.viewEnabled:
-        modelMustHavePlayers()
-
-    if numberOfHumans != 0:
-        createHumans(numberOfHumans, model)
-
-    createBots(numberOfNNBots, model, "NN", parameters, path)
-    createBots(numberOfGreedyBots, model, "Greedy", parameters)
-    createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
-
-
-def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
-    if __debug__:
-        print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences), "\n")
-    for experienceList in gatheredExperiences:
-        for experience in experienceList:
-            # TODO: Make add method nicer by taking entire memory as argument?
-            expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
-    return expReplayer
-
-
 def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
                     guiEnabled, viewEnabled, numberOfHumans, spectate):
 
@@ -706,6 +683,33 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
             if parameters.ENABLE_TESTING:
                 if step % testPercentage == 0:
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
+
+
+def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
+    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
+    numberOfNNBots = parameters.NUM_NN_BOTS
+    numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
+    numberOfBots = numberOfNNBots + numberOfGreedyBots
+
+    if numberOfBots == 0 and not model.viewEnabled:
+        modelMustHavePlayers()
+
+    if numberOfHumans != 0:
+        createHumans(numberOfHumans, model)
+
+    createBots(numberOfNNBots, model, "NN", parameters, path)
+    createBots(numberOfGreedyBots, model, "Greedy", parameters)
+    createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
+
+
+def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
+    if __debug__:
+        print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences), "\n")
+    for experienceList in gatheredExperiences:
+        for experience in experienceList:
+            # TODO: Make add method nicer by taking entire memory as argument?
+            expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
+    return expReplayer
 
 
 def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, loadModel, modelPath):
