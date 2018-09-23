@@ -412,6 +412,8 @@ def testModel(path, name, testParams=None):
     testSteps = testParams.RESET_LIMIT
     pool = mp.Pool(n_tests)
     testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
+    pool.close()
+    pool.join()
     print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
     print("------------------------------------------------------------------\n")
 
@@ -460,7 +462,6 @@ def updateTestResults(testResults, modelPath, parameters, packageName):
     # if str(currentAlg) != "AC":
     #     originalTemp = currentAlg.getTemperature()
     #     currentAlg.setTemperature(0)
-    # TODO: All tests seems to be equal (randomization seed is the same?)
     # TODO: Perform all test kinds simultaneously
 
     testParams = createTestParams(packageName)
@@ -521,7 +522,6 @@ def exportResults(results, path, name):
     filePath = path + name + ".txt"
     with open(filePath, "a") as f:
         for val in results:
-            # write as: "mean\n"
             line = str(val) + "\n"
             f.write(line)
 
@@ -558,6 +558,8 @@ def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
 
 # Plot test results and export data
 def exportTestResults(testResults, path, parameters, testPercentage, maxSteps):
+    if not os.path.exists(path + "data/"):
+        os.mkdir(path + "data/")
     meanMassesOfTestResults = [val[0] for val in testResults]
     exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
     meanMassesOfPelletResults = [val[2] for val in testResults]
@@ -651,7 +653,8 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
 
 
 def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
-    print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences), "\n")
+    if __debug__:
+        print("Experiences shape of collector #" + str(processNum) + ": ", np.shape(gatheredExperiences), "\n")
     for experienceList in gatheredExperiences:
         for experience in experienceList:
             # TODO: Make add method nicer by taking entire memory as argument?
@@ -739,8 +742,8 @@ def terminateExperienceCollectors(collectors):
     print("Terminating collectors...")
     for p in collectors:
         p.terminate()
-        if not p.is_alive():
-            p.join(timeout=0.001)
+        # if not p.is_alive():
+        p.join(timeout=0.001)
 
 
 def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
@@ -810,17 +813,14 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY)
         # expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
 
-
     # TODO: Uncomment for Anton's LSTM expReplay stuff
     # expReplayer = ExpReplay(parameters)
 
-    # experienceCollectors = mp.Pool(numWorkers)
-    # Initial testing (train steps at 0%)
-    testResults = updateTestResults(testResults, path, parameters, packageName)
     # Gather initial experiences
     print("Beggining to initial experience collection...")
     collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
 
+    # TODO: Start with buffer completely full?
     # TODO: experiences are being added within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     # TODO: Don't terminate collectors, but make them wait instead so as to not have to re-initialize them every time
@@ -828,18 +828,24 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
         sleep(0.000001)
     terminateExperienceCollectors(collectors)
+    print("Initial experience collection completed.")
     print("Current replay buffer size: " ,len(expReplayer))
     print("\nBeggining to train...")
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     # Perform simultaneous experiencing and training
-    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1) #Get int value closest to to 1% of training time
-    currentPart = 0
-    testPercentage = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    currentTestPercentage = 0
-    stepChunk = parameters.TARGET_NETWORK_STEPS
     maxSteps = parameters.MAX_TRAINING_STEPS
+    smallPart = max(int(maxSteps / 100), 1) #Get int value closest to to 1% of training time
+    currentPart = 0
+    testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
+    nextTestInterval = 0
+    stepChunk = parameters.TARGET_NETWORK_STEPS
     for step in range(0, maxSteps, stepChunk):
+        # TODO: make testing happen in parallel to training procedure
+        # Check if it is time for testing (starts at 0%)
+        if parameters.ENABLE_TESTING and step >= nextTestInterval:
+            nextTestInterval += testInterval
+            testResults = updateTestResults(testResults, path, parameters, packageName)
         # TODO: Make training processes not join()
         # Create training processes
         trainers = []
@@ -854,17 +860,16 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         # Check if 1% of training time has elapsed
         if step >= currentPart + smallPart:
             currentPart = step - (step % smallPart)
-            percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS
-            print("Trained: ", percentPrint, "%")
-        # TODO: make testing happen in parallel to training procedure
-        # Check if it is time for testing (5% training time)
-        if parameters.ENABLE_TESTING and step >= currentTestPercentage + testPercentage:
-            currentTestPercentage = step - (step - testPercentage)
-            testResults = updateTestResults(testResults, path, parameters, packageName)
+            percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS * 100
+            print("Trained: ", int(percentPrint), "%")
 
-    exportTestResults(testResults, path, parameters, testPercentage, maxSteps)
+    # Final testing for when model has completed training
+    testResults = updateTestResults(testResults, path, parameters, packageName)
+
+    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.")
     print("")
+    exportTestResults(testResults, path, parameters, testInterval, maxSteps)
 
 
 def run():
