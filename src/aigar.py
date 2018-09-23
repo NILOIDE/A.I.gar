@@ -486,7 +486,7 @@ def exportResults(results, path, name):
 
 # Plot test result and export plot to file with given name
 def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
-    x = range(0, end + timeBetween, timeBetween)
+    x = range(0, len(testResults)*timeBetween, timeBetween)
     y = [x[idxOfMean] for x in testResults]
     ysigma = [x[idxOfMean + 1] for x in testResults]
 
@@ -516,31 +516,32 @@ def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
 
 
 # Plot test results and export data
-def exportTestResults(testResults, path, parameters, testPercentage, maxSteps):
+def exportTestResults(testResults, path, parameters, testInterval):
+    maxSteps = parameters.MAX_TRAINING_STEPS
     if not os.path.exists(path + "data/"):
         os.mkdir(path + "data/")
     meanMassesOfTestResults = [val[0] for val in testResults]
     exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
     meanMassesOfPelletResults = [val[2] for val in testResults]
     exportResults(meanMassesOfPelletResults, path + "data/", "Pellet_CollectionMassOverTime")
-    plotTesting(testResults, path, testPercentage, maxSteps, "Test", 0)
-    plotTesting(testResults, path, testPercentage, maxSteps, "Pellet_Collection", 2)
+    plotTesting(testResults, path, testInterval, maxSteps, "Test", 0)
+    plotTesting(testResults, path, testInterval, maxSteps, "Pellet_Collection", 2)
 
     if parameters.MULTIPLE_BOTS_PRESENT:
         meanMassesOfGreedyResults = [val[4] for val in testResults]
         exportResults(meanMassesOfGreedyResults, path + "data/", "VS_1_GreedyMassOverTime")
-        plotTesting(testResults, path, testPercentage, maxSteps, "Vs_Greedy", 4)
+        plotTesting(testResults, path, testInterval, maxSteps, "Vs_Greedy", 4)
     if parameters.VIRUS_SPAWN:
         meanMassesOfPelletVirusResults = [val[6] for val in testResults]
         exportResults(meanMassesOfPelletVirusResults, path + "data/", "Pellet_Collection_Virus_MassOverTime")
-        plotTesting(testResults, path, testPercentage, maxSteps, "Pellet_Collection_with_Viruses", 6)
+        plotTesting(testResults, path, testInterval, maxSteps, "Pellet_Collection_with_Viruses", 6)
         if parameters.MULTIPLE_BOTS_PRESENT:
             meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
             exportResults(meanMassesOfGreedyVirusResults, path + "data/", "VS_1_Greedy_Virus_MassOverTime")
-            plotTesting(testResults, path, testPercentage, maxSteps, "Vs_Greedy_with_Viruses", 8)
+            plotTesting(testResults, path, testInterval, maxSteps, "Vs_Greedy_with_Viruses", 8)
 
 
-def updateTestResults(testResults, modelPath, parameters, packageName):
+def updateTestResults(testResults, path, parameters, packageName, testInterval=None):
     # currentAlg = model.getNNBot().getLearningAlg()
     # originalNoise = currentAlg.getNoise()
     # currentAlg.setNoise(0)
@@ -552,10 +553,10 @@ def updateTestResults(testResults, modelPath, parameters, packageName):
     # TODO: Perform all test kinds simultaneously
 
     testParams = createTestParams(packageName)
-    currentEval = testModel(modelPath, "test", testParams)
+    currentEval = testModel(path, "test", testParams)
 
     pelletTestParams = createTestParams(packageName, False)
-    pelletEval = testModel(modelPath, "pellet", pelletTestParams)
+    pelletEval = testModel(path, "pellet", pelletTestParams)
 
     vsGreedyEval = (0, 0, 0, 0)
     virusGreedyEval = (0, 0, 0, 0)
@@ -563,14 +564,14 @@ def updateTestResults(testResults, modelPath, parameters, packageName):
 
     if parameters.MULTIPLE_BOTS_PRESENT:
         greedyTestParams = createTestParams(packageName, False, 1, 1)
-        vsGreedyEval = testModel(modelPath, "vsGreedy", greedyTestParams)
+        vsGreedyEval = testModel(path, "vsGreedy", greedyTestParams)
 
     if parameters.VIRUS_SPAWN:
         virusTestParams = createTestParams(packageName, True)
-        virusEval = testModel(modelPath, "pellet_with_virus", virusTestParams)
+        virusEval = testModel(path, "pellet_with_virus", virusTestParams)
         if parameters.MULTIPLE_BOTS_PRESENT:
             virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
-            virusGreedyEval = testModel(modelPath, "vsGreedy_with_virus", virusGreedyTestParams)
+            virusGreedyEval = testModel(path, "vsGreedy_with_virus", virusGreedyTestParams)
 
     # TODO: Check if following commented noise code is needed
     # currentAlg.setNoise(originalNoise)
@@ -582,6 +583,8 @@ def updateTestResults(testResults, modelPath, parameters, packageName):
     stdDev = currentEval[3]
     testResults.append((meanScore, stdDev, pelletEval[2], pelletEval[3],
                         vsGreedyEval[2], vsGreedyEval[3], virusEval[2], virusEval[3], virusGreedyEval[2], virusGreedyEval[3]))
+    exportTestResults(testResults, path, parameters, testInterval)
+
     return testResults
 
 
@@ -838,18 +841,17 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     # Perform simultaneous experiencing and training
-    maxSteps = parameters.MAX_TRAINING_STEPS
-    smallPart = max(int(maxSteps / 100), 1) #Get int value closest to to 1% of training time
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1) #Get int value closest to to 1% of training time
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     nextTestInterval = 0
     stepChunk = parameters.TARGET_NETWORK_STEPS
-    for step in range(0, maxSteps, stepChunk):
+    for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
         # TODO: make testing happen in parallel to training procedure
         # Check if it is time for testing (starts at 0%)
         if parameters.ENABLE_TESTING and step >= nextTestInterval:
             nextTestInterval += testInterval
-            testResults = updateTestResults(testResults, path, parameters, packageName)
+            testResults = updateTestResults(testResults, path, parameters, packageName, testInterval)
         # TODO: Make training processes not join()
         # Create training processes
         trainers = []
@@ -873,7 +875,6 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.")
     print("")
-    exportTestResults(testResults, path, parameters, testInterval, maxSteps)
 
 
 def run():
