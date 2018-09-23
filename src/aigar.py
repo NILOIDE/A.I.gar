@@ -284,16 +284,12 @@ def modifyParameterValue(tweaked, path):
             text += char
             if char == "=":
                 break
-        # if tweaked[i][0] == "RESET_LIMIT":
-        #     model.resetLimit = int(tweaked[i][1])
         print(tweaked[i][0])
         text += " " + str(tweaked[i][1]) + "\n"
         lines[tweaked[i][2]] = text
     out = open(name_of_file, 'w')
     out.writelines(lines)
     out.close()
-    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
-    # model.initParameters(parameters)
 
 
 def nameSavedModelFolder(array):
@@ -689,7 +685,6 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
 
 
 def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
-    # parameters = importlib.import_module('.networkParameters', package=model.getPath().replace("/", ".")[:-1])
     numberOfNNBots = parameters.NUM_NN_BOTS
     numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
     numberOfBots = numberOfNNBots + numberOfGreedyBots
@@ -812,13 +807,11 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
         manager = MyManager()
         manager.start()
         expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
-        # expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
     else:
         MyManager.register('ExpReplayer', ReplayBuffer, TestProxy)
         manager = MyManager()
         manager.start()
         expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY)
-        # expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
 
     # TODO: Uncomment for Anton's LSTM expReplay stuff
     # expReplayer = ExpReplay(parameters)
@@ -878,10 +871,6 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
 
 
 def run():
-    # This is used in case we want to use a freezing program to create an .exe
-    #if getattr(sys, 'frozen', False):
-    #    os.chdir(sys._MEIPASS)
-
     guiEnabled = int(input("Enable GUI?: (1 == yes)\n"))
     guiEnabled = (guiEnabled == 1)
     viewEnabled = False
@@ -946,7 +935,6 @@ def run():
         if packageName is not None:
             parameters = importlib.import_module('.networkParameters', package=packageName)
             algorithm = algorithmNameToNumber(parameters.ALGORITHM)
-            # model.setPath(modelName)
 
     if not loadModel:
         packageName = "model"
