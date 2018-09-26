@@ -24,6 +24,7 @@ from time import sleep
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
 
+
 import numpy as np
 # import tensorflow as tf
 import random as rn
@@ -366,93 +367,6 @@ def createBots(number, model, botType, parameters, loadPath=None):
             model.createBot(botType, None, parameters)
 
 
-# Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
-def performTest(path, testParams, testSteps):
-    testModel = Model(False, False, testParams)
-    createModelPlayers(testParams, testModel, path)
-
-    testModel.initialize(False)
-    for step in range(testSteps):
-        testModel.update()
-
-    bots = testModel.getBots()
-    massOverTime = [bot.getMassOverTime() for bot in bots]
-    meanMass = numpy.mean([numpy.mean(botMass) for botMass in massOverTime])
-    maxMeanMass = numpy.max(meanMass)
-    maxMass = numpy.max([numpy.max(botMass) for botMass in massOverTime])
-    varianceMass = numpy.mean(numpy.var(massOverTime))
-
-    print("Test run:" +
-          "\n  Process id: " + str(os.getpid()) +
-          "\n  Number of bot mass lists: " + str(len(massOverTime)) +
-          "\n  Mean mass: "+ str(meanMass) +
-          "\n  Max mass: "+ str(maxMass) +
-          "\n")
-
-    return [massOverTime, meanMass, maxMass]
-
-
-# Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
-# The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
-def testModel(path, name, testParams=None):
-    print("\nTesting", name, "...")
-    print("------------------------------------------------------------------\n")
-
-    start = time.time()
-
-    # TODO: Parallel testing used to take as long as serial. Test this.
-    # Serial Testing
-    currentEval = []
-    # for i in range(n_training):
-    #     currentEval.append(performTest(testParams, testSteps))
-
-    # Parallel testing
-    n_tests = testParams.DUR_TRAIN_TEST_NUM
-    testSteps = testParams.RESET_LIMIT
-    #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
-    pool = mp.Pool(n_tests)
-    testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
-    pool.close()
-    pool.join()
-    print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
-    print("------------------------------------------------------------------\n")
-
-    masses = []
-    meanMasses = []
-    maxMasses = []
-    for test in range(n_tests):
-        masses.extend(testResults[test][0])
-        meanMasses.append(testResults[test][1])
-        maxMasses.append(testResults[test][2])
-
-    meanScore = numpy.mean(meanMasses)
-    stdMean = numpy.std(meanMasses)
-    meanMaxScore = numpy.mean(maxMasses)
-    stdMax = numpy.std(maxMasses)
-    maxScore = numpy.max(maxMasses)
-    # TODO: fix plotting
-    # plotPath = modelPath
-    # modelPath += "data/"
-    # if not os.path.exists(modelPath):
-    #     os.mkdir(modelPath)
-    # if plotting:
-    #     meanMassPerTimeStep = []
-    #     for timeIdx in range(reset_time):
-    #         val = 0
-    #         for listIdx in range(n_training):
-    #             val += masses[listIdx][timeIdx]
-    #         meanVal = val / n_training
-    #         meanMassPerTimeStep.append(meanVal)
-    #
-    #     #exportTestResults(meanMassPerTimeStep, modelPath, "Mean_Mass_" + name)
-    #     labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
-    #               "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": plotPath,
-    #               "subPath": "Mean_Mass_" + name}
-    #     plot(masses, reset_time, 1, labels)
-
-    return name, maxScore, meanScore, stdMean, meanMaxScore, stdMax
-
-
 def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, num_rand_bots=0):
     # Create a copy of the networkParameters module import without
     # overwriting the already-existing global networkParameters module
@@ -481,34 +395,35 @@ def exportResults(results, path, name):
             f.write(line)
 
 # Plot test result and export plot to file with given name
-def plotTesting(testResults, path, timeBetween, end, name, idxOfMean):
-    x = range(0, len(testResults)*timeBetween, timeBetween)
-    y = [x[idxOfMean] for x in testResults]
-    ysigma = [x[idxOfMean + 1] for x in testResults]
+def plotTesting(testResults, path, timeBetween, end):
+    for testType in testResults[0]:
+        x = range(0, len(testResults)*timeBetween, timeBetween)
+        y = [x[testType]["meanScore"] for x in testResults]
+        ysigma = [x[testType]["stdMean"] for x in testResults]
 
-    y_lower_bound = [y[i] - ysigma[i] for i in range(len(y))]
-    y_upper_bound = [y[i] + ysigma[i] for i in range(len(y))]
+        y_lower_bound = [y[i] - ysigma[i] for i in range(len(y))]
+        y_upper_bound = [y[i] + ysigma[i] for i in range(len(y))]
 
-    plt.ticklabel_format(axis='x', style='sci', scilimits=(1, 4))
-    plt.clf()
-    fig = plt.gcf()
-    ax = plt.gca()
-    # fig, ax = plt.subplots(1)
-    ax.plot(x, y, lw=2, label="testing mass", color='blue')
-    ax.fill_between(x, y_lower_bound, y_upper_bound, facecolor='blue', alpha=0.5,
-                    label="+/- sigma")
-    ax.set_xlabel("Time")
-    yLabel = "Mass"
-    title =  name + " mass over time"
+        plt.ticklabel_format(axis='x', style='sci', scilimits=(1, 4))
+        plt.clf()
+        fig = plt.gcf()
+        ax = plt.gca()
+        # fig, ax = plt.subplots(1)
+        ax.plot(x, y, lw=2, label="testing mass", color='blue')
+        ax.fill_between(x, y_lower_bound, y_upper_bound, facecolor='blue', alpha=0.5,
+                        label="+/- sigma")
+        ax.set_xlabel("Time")
+        yLabel = "Mass"
+        title =  testResults[0][testType]["plotName"] + " mass over time"
 
-    meanY = numpy.mean(y)
-    ax.legend(loc='upper left')
-    ax.set_ylabel(yLabel)
-    ax.set_title(title + " mean value (" + str(round(meanY, 1)) + ") $\pm$ $\sigma$ interval")
-    ax.grid()
-    fig.savefig(path + title + ".pdf")
+        meanY = numpy.mean(y)
+        ax.legend(loc='upper left')
+        ax.set_ylabel(yLabel)
+        ax.set_title(title + " mean value (" + str(round(meanY, 1)) + ") $\pm$ $\sigma$ interval")
+        ax.grid()
+        fig.savefig(path + title + ".pdf")
 
-    plt.close()
+        plt.close()
 
 
 # Plot test results and export data
@@ -516,28 +431,93 @@ def exportTestResults(testResults, path, parameters, testInterval):
     maxSteps = parameters.MAX_TRAINING_STEPS
     if not os.path.exists(path + "data/"):
         os.mkdir(path + "data/")
-    meanMassesOfTestResults = [val[0] for val in testResults]
+    meanMassesOfTestResults = [val["current"]["meanScore"] for val in testResults]
     exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
-    meanMassesOfPelletResults = [val[2] for val in testResults]
+    meanMassesOfPelletResults = [val["pellet"]["meanScore"] for val in testResults]
     exportResults(meanMassesOfPelletResults, path + "data/", "Pellet_CollectionMassOverTime")
-    plotTesting(testResults, path, testInterval, maxSteps, "Test", 0)
-    plotTesting(testResults, path, testInterval, maxSteps, "Pellet_Collection", 2)
 
     if parameters.MULTIPLE_BOTS_PRESENT:
-        meanMassesOfGreedyResults = [val[4] for val in testResults]
+        meanMassesOfGreedyResults = [val["vsGreedy"]["meanScore"] for val in testResults]
         exportResults(meanMassesOfGreedyResults, path + "data/", "VS_1_GreedyMassOverTime")
-        plotTesting(testResults, path, testInterval, maxSteps, "Vs_Greedy", 4)
     if parameters.VIRUS_SPAWN:
-        meanMassesOfPelletVirusResults = [val[6] for val in testResults]
+        meanMassesOfPelletVirusResults = [val["virus"]["meanScore"] for val in testResults]
         exportResults(meanMassesOfPelletVirusResults, path + "data/", "Pellet_Collection_Virus_MassOverTime")
-        plotTesting(testResults, path, testInterval, maxSteps, "Pellet_Collection_with_Viruses", 6)
         if parameters.MULTIPLE_BOTS_PRESENT:
-            meanMassesOfGreedyVirusResults = [val[8] for val in testResults]
+            meanMassesOfGreedyVirusResults = [val["virusGreedy"]["meanScore"] for val in testResults]
             exportResults(meanMassesOfGreedyVirusResults, path + "data/", "VS_1_Greedy_Virus_MassOverTime")
-            plotTesting(testResults, path, testInterval, maxSteps, "Vs_Greedy_with_Viruses", 8)
+
+    plotTesting(testResults, path, testInterval, maxSteps)
 
 
-def updateTestResults(testResults, path, parameters, packageName, testInterval=None):
+# Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
+def performTest(path, testParams, testSteps):
+    testModel = Model(False, False, testParams)
+    createModelPlayers(testParams, testModel, path)
+
+    testModel.initialize(False)
+    for step in range(testSteps):
+        testModel.update()
+
+    bots = testModel.getBots()
+    massOverTime = [bot.getMassOverTime() for bot in bots]
+    meanMass = numpy.mean([numpy.mean(botMass) for botMass in massOverTime])
+    maxMeanMass = numpy.max(meanMass)
+    maxMass = numpy.max([numpy.max(botMass) for botMass in massOverTime])
+    varianceMass = numpy.mean(numpy.var(massOverTime))
+
+    print("Test run:" +
+          "\n  Process id: " + str(os.getpid()) +
+          "\n  Number of bot mass lists: " + str(len(massOverTime)) +
+          "\n  Mean mass: "+ str(meanMass) +
+          "\n  Max mass: "+ str(maxMass) +
+          "\n")
+
+    return [massOverTime, meanMass, maxMass]
+
+
+# Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
+# The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
+def testModel(path, name, plotName, testParams, n_tests):
+    print("\nTesting", name, "...")
+    print("------------------------------------------------------------------\n")
+
+    start = time.time()
+    testSteps = testParams.RESET_LIMIT
+    # TODO: Parallel testing used to take as long as serial. Test this.
+    # Serial Testing
+    # testResults = []
+    # for i in range(n_tests):
+    #     testResults.append(performTest(path, testParams, testSteps))
+
+    # Parallel testing
+
+    #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
+    pool = mp.Pool(n_tests)
+    testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
+    pool.close()
+    pool.join()
+    print("Number of tests: ", n_tests, "Time elapsed: ", time.time() - start, "\n")
+    print("------------------------------------------------------------------\n")
+
+    masses = []
+    meanMasses = []
+    maxMasses = []
+    for test in range(n_tests):
+        masses.extend(testResults[test][0])
+        meanMasses.append(testResults[test][1])
+        maxMasses.append(testResults[test][2])
+    evals = {"name":name}
+    evals["plotName"] = plotName
+    evals["meanScore"] = numpy.mean(meanMasses)
+    evals["stdMean"] = numpy.std(meanMasses)
+    evals["meanMaxScore"] = numpy.mean(maxMasses)
+    evals["stdMax"] = numpy.std(maxMasses)
+    evals["maxScore"] = numpy.max(maxMasses)
+    # return (name, maxScore, meanScore, stdMean, meanMaxScore, stdMax), masses
+    return evals, masses
+
+
+def testingProcedure(path, parameters, packageName, n_tests):
     # currentAlg = model.getNNBot().getLearningAlg()
     # originalNoise = currentAlg.getNoise()
     # currentAlg.setNoise(0)
@@ -547,27 +527,26 @@ def updateTestResults(testResults, path, parameters, packageName, testInterval=N
     #     originalTemp = currentAlg.getTemperature()
     #     currentAlg.setTemperature(0)
     # TODO: Perform all test kinds simultaneously
-
+    testEvals = {}
+    masses = {}
     testParams = createTestParams(packageName)
-    currentEval = testModel(path, "test", testParams)
+    testEvals["current"], masses["current"] = testModel(path, "test", "Test", testParams, n_tests)
 
     pelletTestParams = createTestParams(packageName, False)
-    pelletEval = testModel(path, "pellet", pelletTestParams)
-
-    vsGreedyEval = (0, 0, 0, 0)
-    virusGreedyEval = (0, 0, 0, 0)
-    virusEval = (0, 0, 0, 0)
+    testEvals["pellet"], masses["pellet"] = testModel(path, "pellet", "Pellet_Collection", pelletTestParams, n_tests)
 
     if parameters.MULTIPLE_BOTS_PRESENT:
         greedyTestParams = createTestParams(packageName, False, 1, 1)
-        vsGreedyEval = testModel(path, "vsGreedy", greedyTestParams)
+        testEvals["vsGreedy"], masses["vsGreedy"] = testModel(path, "vsGreedy", "Vs_Greedy", greedyTestParams, n_tests)
 
     if parameters.VIRUS_SPAWN:
         virusTestParams = createTestParams(packageName, True)
-        virusEval = testModel(path, "pellet_with_virus", virusTestParams)
+        testEvals["virus"], masses["virus"] = testModel(path, "pellet_with_virus", "Pellet_Collection_with_Viruses",
+                                                        virusTestParams, n_tests)
         if parameters.MULTIPLE_BOTS_PRESENT:
             virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
-            virusGreedyEval = testModel(path, "vsGreedy_with_virus", virusGreedyTestParams)
+            testEvals["virusGreedy"], masses["virusGreedy"] = testModel(path, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
+                                                                        virusGreedyTestParams, n_tests)
 
     # TODO: Check if following commented noise code is needed
     # currentAlg.setNoise(originalNoise)
@@ -575,67 +554,47 @@ def updateTestResults(testResults, path, parameters, packageName, testInterval=N
     # if str(currentAlg) != "AC":
     #     currentAlg.setTemperature(originalTemp)
 
-    meanScore = currentEval[2]
-    stdDev = currentEval[3]
-    testResults.append((meanScore, stdDev, pelletEval[2], pelletEval[3],
-                        vsGreedyEval[2], vsGreedyEval[3], virusEval[2], virusEval[3], virusGreedyEval[2], virusGreedyEval[3]))
-    exportTestResults(testResults, path, parameters, testInterval)
-
-    return testResults
+    return testEvals, masses
 
 
-
-def runTests(model, parameters):
-    np.random.seed()
-
-    print("Testing...")
-    # Set Parameters:
-    resetPellet = 15000
-    resetGreedy = 30000
-    resetVirus = 15000
-    n_test_runs = 10
-    trainedBot = model.getNNBot()
-    trainedAlg = trainedBot.getLearningAlg()
-    evaluations = []
-    # Pellet testing:
-    params = Params(0, False, parameters.EXPORT_POINT_AVERAGING)
-
-    pelletModel = Model(False, False, params, False)
-    pelletModel.createBot("NN", trainedAlg, parameters)
-    pelletEvaluation = testModel(pelletModel, n_test_runs, resetPellet, model.getPath(), "pellet_collection")
-    evaluations.append(pelletEvaluation)
-    # Greedy Testing:
-    if len(model.getBots()) > 1:
-        greedyModel = Model(False, False, params, False)
-        greedyModel.createBot("NN", trainedAlg, parameters)
-        greedyModel.createBot("Greedy", None, parameters)
-        greedyEvaluation = testModel(greedyModel, n_test_runs, resetGreedy, model.getPath(), "vs_1_greedy")
-        evaluations.append(greedyEvaluation)
-    # Virus Testing:
-    if model.getVirusEnabled():
-        params = Params(0, True, parameters.EXPORT_POINT_AVERAGING)
-        virusModel = Model(False, False, params, False)
-        virusModel.createBot("NN", trainedAlg, parameters)
-        virusEvaluation = testModel(virusModel, n_test_runs, resetVirus, model.getPath(), "virus")
-        evaluations.append(virusEvaluation)
+def runFinalTests(path, parameters, packageName):
+    print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+    print("Performing final tests...\n")
+    evals, masses = testingProcedure(path, parameters, packageName, parameters.FINAL_TEST_LEN)
 
     # TODO: add more test scenarios for multiple greedy bots and full model check
-    print("Testing completed.")
 
-    name_of_file = model.getPath() + "/final_results.txt"
+    name_of_file = path + "/final_results.txt"
     with open(name_of_file, "w") as file:
-        data = "Avg run time(s): " + str(round(numpy.mean(model.timings), 6)) + "\n"
-        data += "Number of runs per testing: " + str(n_test_runs) + "\n"
-        for evaluation in evaluations:
-            name = evaluation[0]
-            maxScore = str(round(evaluation[1], 1))
-            meanScore = str(round(evaluation[2], 1))
-            stdMean = str(round(evaluation[3], 1))
-            meanMaxScore = str(round(evaluation[4], 1))
-            stdMax = str(round(evaluation[5], 1))
+        data = "Number of runs per testing: " + str(parameters.FINAL_TEST_LEN) + "\n"
+        for testType in evals:
+            name = evals[testType]["name"]
+            maxScore = str(round(evals[testType]["maxScore"], 1))
+            meanScore = str(round(evals[testType]["meanScore"], 1))
+            stdMean = str(round(evals[testType]["stdMean"], 1))
+            meanMaxScore = str(round(evals[testType]["meanMaxScore"], 1))
+            stdMax = str(round(evals[testType]["stdMax"], 1))
             data += name + " Highscore: " + maxScore + " Mean: " + meanScore + " StdMean: " + stdMean \
                     + " Mean_Max_Score: " + meanMaxScore + " Std_Max_Score: " + stdMax + "\n"
         file.write(data)
+
+    for testType in masses:
+        print("\nPlotting " + evals[testType]["plotName"] + "...\n")
+
+        meanMassPerTimeStep = []
+        for timeIdx in range(parameters.RESET_LIMIT):
+            val = 0
+            for test in masses[testType]:
+                val += test[timeIdx]
+            meanVal = val / parameters.FINAL_TEST_LEN
+            meanMassPerTimeStep.append(meanVal)
+        # exportTestResults(meanMassPerTimeStep, modelPath, "Mean_Mass_" + name)
+        labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
+                  "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": path,
+                  "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
+        plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
+    print("\nTesting completed.")
+    print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
 
 
 def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
@@ -719,12 +678,13 @@ def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, l
     model.initialize(loadModel)
     # Run game until terminated
     while True:
-        # TODO: Remove 'resetModel() from model. Make resetting happen outside of model
         for step in range(parameters.RESET_LIMIT):
             model.update()
         gatheredExperiences = [bot.getExperiences() for bot in model.getBots()]
-        # TODO: Shouldn't bot experiences be reset? (They currently are, but weren't before)
         addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum)
+        # TODO: We can also completely reinitialize the game (maybe OpenAI gym doesn't allow game resetting)
+        model.resetModel()
+
 
 
 def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
@@ -817,16 +777,15 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     # expReplayer = ExpReplay(parameters)
 
     # Gather initial experiences
-    print("Beggining to initial experience collection...")
+    print("\n******************************************************************")
+    print("Beggining to initial experience collection...\n")
     collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
 
     # TODO: Start with buffer completely full?
-    # TODO: experiences are being added within subprocesses (problem is that they will not be appended in order)
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
-    # TODO: Don't terminate collectors, but make them wait instead so as to not have to re-initialize them every time
     # Collect enough experiences before training
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
-        sleep(0.000001)
+        pass
     terminateExperienceCollectors(collectors)
     print("Initial experience collection completed.")
     print("Current replay buffer size: " ,len(expReplayer))
@@ -838,13 +797,14 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     nextTestInterval = 0
-    stepChunk = parameters.TARGET_NETWORK_STEPS
+    stepChunk = parameters.NETWORK_UPDATE_STEPS
     for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
         # TODO: make testing happen in parallel to training procedure
         # Check if it is time for testing (starts at 0%)
         if parameters.ENABLE_TESTING and step >= nextTestInterval:
             nextTestInterval += testInterval
-            testResults = updateTestResults(testResults, path, parameters, packageName, testInterval)
+            testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
+            exportTestResults(testResults, path, parameters, testInterval)
         # TODO: Make training processes not join()
         # Create training processes
         trainers = []
@@ -863,8 +823,8 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
             print("Trained: ", int(percentPrint), "%")
 
     # Final testing for when model has completed training
-    testResults = updateTestResults(testResults, path, parameters, packageName)
-
+    testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
+    exportTestResults(testResults, path, parameters, testInterval)
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.")
     print("")
@@ -991,12 +951,12 @@ def run():
         trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
     else:
         pass
-    quit()
 
     if parameters.ENABLE_TRAINING:
+        runFinalTests(modelPath, parameters, packageName)
+        quit()
         model.save(True)
         model.saveModels()
-        runTests(model, parameters)
         if model_in_subfolder:
             print(os.path.join(modelPath))
             createCombinedModelGraphs(os.path.join(modelPath))

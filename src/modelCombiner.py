@@ -304,7 +304,7 @@ def getTimeAxis(maxLength, avgLength):
 
 
 def getMeanAndStDev(allList, maxLength, stdError = False):
-    print("Shape of allList: ", numpy.shape(allList))
+    print("Shape of allList: " + str(numpy.shape(allList)))
     mean_list = []
     stDev_list = []
     for i in range(maxLength):
@@ -335,7 +335,7 @@ def getMeanAndStDev(allList, maxLength, stdError = False):
 
 
 def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True, figureNum = 0):
-    print("Plotting ", labels["title"], "...")
+    print("Plotting " + labels["title"] + "...")
     x = getTimeAxis(maxLength, avgLength)
     y, ysigma = getMeanAndStDev(ylist, maxLength)
     if y is None or ysigma is None:
@@ -346,7 +346,6 @@ def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showCon
 
     plt.figure(0)
     matplotlib.pyplot.ticklabel_format(axis='x', style='sci', scilimits=(1, 4))
-
 
     fig, ax = plt.subplots(1)
     ax.plot(x, y, lw=2, label=labels["meanLabel"], color='blue')
@@ -368,22 +367,15 @@ def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showCon
         path += "_and_" + labels2["subPath"]
 
     meanY = numpy.mean(y)
-
-
     ax.legend(loc='upper left')
     ax.set_ylabel(yLabel)
     if showConfInt:
         meanOfRuns = [numpy.mean(run) for run in ylist]
         meanVal = np.mean(meanOfRuns)
         stdVal = scipy.stats.sem(meanOfRuns)
-        confInt = scipy.stats.t.interval(0.95, len(meanOfRuns) - 1, loc=meanVal,
-                                         scale=stdVal)
-
-
+        confInt = scipy.stats.t.interval(0.95, len(meanOfRuns) - 1, loc=meanVal, scale=stdVal)
         title = title + " averaged over " + str(len(meanOfRuns)) +  " runs. Mean: " + str(round(meanY,1)) +\
                 " Std: " + str(round(stdVal, 1)) + "\nConfInt95%: "+ str(np.round(confInt, 1))
-
-
     else:
         title = title + " mean value (" + str(round(meanY, 1)) + ") $\pm$ $\sigma$ interval"
     ax.set_title(title)
@@ -392,8 +384,6 @@ def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showCon
         fig.savefig(path + ".pdf")
         plt.clf()
         plt.close()
-
-
 
 if __name__ == '__main__':
     basePath = "savedModels"

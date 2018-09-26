@@ -25,7 +25,7 @@ class RGBGenerator:
 
         if __debug__:
             self.screen = pygame.display.set_mode(self.screenDims)
-            pygame.init()
+            pygame.display.init()
             pygame.display.set_caption('A.I.gar')
 
     def drawCells(self, cells, fovPos, fovSize):

@@ -170,6 +170,8 @@ class Bot(object):
         elif self.type == "Greedy" or self.type == "Random":
             self.currentAction = [0, 0, 0, 0]
 
+        self.experiences = []
+
     def updateRewards(self):
         self.cumulativeReward += self.getReward() if self.lastMass else 0
         self.lastReward = self.cumulativeReward

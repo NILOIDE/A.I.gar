@@ -5,7 +5,7 @@ Default = False
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
-RESET_LIMIT = 1000
+RESET_LIMIT = 20000
 EXPORT_POINT_AVERAGING = 500
 NUM_GREEDY_BOTS = 0
 NUM_NN_BOTS = 1
@@ -23,11 +23,11 @@ MEMORY_BETA = 0.4
 # General Training:
 ENABLE_TRAINING = True
 ENABLE_TESTING = True
-DUR_TRAIN_TEST_NUM = 3
+DUR_TRAIN_TEST_NUM = 2
 TRAIN_PERCENT_TEST_INTERVAL = 5
-FINAL_TEST_LEN = 10
+FINAL_TEST_LEN = 2
 FRAME_SKIP_RATE = 10
-TARGET_NETWORK_STEPS = 10
+NETWORK_UPDATE_STEPS = 10
 MAX_TRAINING_STEPS = 500
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to maximize gpu effectiveness. 1 == train every step
@@ -110,6 +110,7 @@ ACTIVATION_FUNC_HIDDEN = 'relu'
 ELU_ALPHA = 1 # TODO: only works for Q-learning so far. Test if it is useful, if so implement for others too
 ACTIVATION_FUNC_OUTPUT = 'linear'
 GRID_VIEW_ENABLED = True
+TARGET_NETWORK_STEPS = 1500
 USE_ACTION_AS_INPUT = False
 TD = 0
 Q_WEIGHT_DECAY    = 0#0.001 #0.001 L2 weight decay parameter. Set to 0 to disable
