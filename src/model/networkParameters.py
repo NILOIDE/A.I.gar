@@ -206,7 +206,7 @@ CNN_LAST_GRID = False
 
 # Multiprocessing:
 NUM_COLLECTORS = 2
-NUM_EXPS_BEFORE_TRAIN = 4000
+NUM_EXPS_BEFORE_TRAIN = 40
 NUM_EPISODE_PER_COLLECTION = 1 # How many episodes should be ran before collected experiences are pushed to buffer
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0

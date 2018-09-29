@@ -17,7 +17,7 @@ from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
 import pathos.multiprocessing as mp
-from multiprocessing import Process, Lock
+from multiprocessing import Process, Pipe
 from multiprocessing.managers import BaseManager, NamespaceProxy
 from time import sleep
 
@@ -356,6 +356,7 @@ def createBots(number, model, botType, parameters, loadPath=None):
             else:
                 print("Please enter a valid algorithm.\n")
                 quit()
+
             networks = learningAlg.initializeNetwork(loadPath, networks)
             model.createBot(botType, learningAlg, parameters)
     elif botType == "Greedy":
@@ -453,7 +454,6 @@ def exportTestResults(testResults, path, parameters, testInterval):
 def performTest(path, testParams, testSteps):
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, path)
-
     testModel.initialize(False)
     for step in range(testSteps):
         testModel.update()
@@ -493,6 +493,7 @@ def testModel(path, name, plotName, testParams, n_tests):
 
     #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
     pool = mp.Pool(n_tests)
+    print("Initializing " + str(n_tests) + " testers..." )
     testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
     pool.close()
     pool.join()
@@ -686,7 +687,6 @@ def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, l
         model.resetModel()
 
 
-
 def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
     numWorkers = parameters.NUM_COLLECTORS
     if numWorkers <= 0:
@@ -708,30 +708,6 @@ def terminateExperienceCollectors(collectors):
         p.join(timeout=0.001)
 
 
-def trainOnExperienceBatch(parameters, path, expReplayer, stepChunk):
-    # TODO: Use GPU
-    algorithmName = parameters.ALGORITHM
-    learningAlg = None
-    if algorithmName == "Q-learning":
-        learningAlg = QLearn(parameters)
-    elif algorithmName == "CACLA":
-        learningAlg = ActorCritic(parameters)
-    learningAlg.initializeNetwork(path)
-    if __debug__:
-        print("Current replay buffer size: ", len(expReplayer))
-        print("Steps before target network update: ", step, "Target network update interval: ", stepChunk)
-    for step in range(stepChunk):
-        batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-        idxs, priorities, updated_actions = learningAlg.learn(batch)
-        if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-            expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
-            if parameters.OCACLA_REPLACE_TRANSITIONS:
-                if updated_actions is not None:
-                    expReplayer.update_dones(idxs, updated_actions)
-                else:
-                    print("Updated actions is None!")
-
-
 class MyManager(BaseManager): pass
 
 class TestProxy(NamespaceProxy):
@@ -751,6 +727,55 @@ class TestProxy(NamespaceProxy):
         return callmethod(self.sample.__name__, (batch_size,))
 
 
+def createLearner(parameters, path):
+    algorithmName = parameters.ALGORITHM
+    learningAlg = None
+    if algorithmName == "Q-learning":
+        learningAlg = QLearn(parameters)
+    elif algorithmName == "CACLA":
+        learningAlg = ActorCritic(parameters)
+    learningAlg.initializeNetwork(path)
+    return learningAlg
+
+
+def train(parameters, expReplayer, learningAlg):
+    # TODO: Use GPU
+    batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
+    idxs, priorities, updated_actions = learningAlg.learn(batch)
+    if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+        expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
+        if parameters.OCACLA_REPLACE_TRANSITIONS:
+            if updated_actions is not None:
+                expReplayer.update_dones(idxs, updated_actions)
+            else:
+                print("Updated actions is None!")
+
+
+# Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
+def trainOnExperiences(parameters, expReplayer, path, connection):
+    learningAlg = createLearner(parameters, path)
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+    testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
+    stepChunk = parameters.NETWORK_UPDATE_STEPS
+    for step in range(parameters.MAX_TRAINING_STEPS):
+        if __debug__:
+            print("Current replay buffer size: ", len(expReplayer))
+            print("Steps before target network update: ", step, "Target network update interval: ", stepChunk)
+        # Check if testing should happen
+        if parameters.ENABLE_TESTING and step % testInterval == 0:
+            connection.send("TEST")
+        # Check if collectors should have their networks reloaded
+        if step != 0 and step % stepChunk == 0:
+            connection.send("RELOAD_COLLECTOR")
+
+        train(parameters, expReplayer, learningAlg)
+        # Check if we should print the training progress percentage
+        if step != 0 and step % smallPart == 0:
+            connection.send("PRINT_TRAIN_PROGRESS")
+    # Signal that training has finished
+    connection.send("DONE")
+
+
 # Create the asynchronous training procedure.
 # The experience replay buffer is created as a multiprocessing.Manager. This manager takes form as the expReplay class
 # and is shared across all subprocesses. In order for subprocesses to access methods of the class, a Proxy manager needs
@@ -760,7 +785,7 @@ class TestProxy(NamespaceProxy):
 # subprocesses collect experiences. After a given amount of training steps, collector subprocesses are killed and
 # re-initialized with a more up-to-date version of the network.
 # Every a certain amount of training, testing is done. This also happens with the training status being printed.
-def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
+def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
     # TODO: check if I implemented ExpReplayer correctly
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         MyManager.register('ExpReplayer', PrioritizedReplayBuffer, TestProxy)
@@ -776,58 +801,59 @@ def trainingProcedure(testResults, parameters, loadedModelName, model_in_subfold
     # TODO: Uncomment for Anton's LSTM expReplay stuff
     # expReplayer = ExpReplay(parameters)
 
+
+    # Perform simultaneous experiencing and training
+    testResults = []
+    collectors = None
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+    currentPart = 0
+    testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
+    # TODO: Create multiple learners
+    # Create training process and communication pipe
+    master_conn, trainer_conn = Pipe()
+    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainer_conn))
     # Gather initial experiences
     print("\n******************************************************************")
     print("Beggining to initial experience collection...\n")
-    collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
-
+    collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel,
+                                           path)
     # TODO: Start with buffer completely full?
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     # Collect enough experiences before training
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
         pass
-    terminateExperienceCollectors(collectors)
     print("Initial experience collection completed.")
-    print("Current replay buffer size: " ,len(expReplayer))
+    print("Current replay buffer size: ", len(expReplayer))
     print("\nBeggining to train...")
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-
-    # Perform simultaneous experiencing and training
-    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1) #Get int value closest to to 1% of training time
-    currentPart = 0
-    testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    nextTestInterval = 0
-    stepChunk = parameters.NETWORK_UPDATE_STEPS
-    for step in range(0, parameters.MAX_TRAINING_STEPS, stepChunk):
-        # TODO: make testing happen in parallel to training procedure
-        # Check if it is time for testing (starts at 0%)
-        if parameters.ENABLE_TESTING and step >= nextTestInterval:
-            nextTestInterval += testInterval
-            testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
-            exportTestResults(testResults, path, parameters, testInterval)
-        # TODO: Make training processes not join()
-        # Create training processes
-        trainers = []
-        trainers.append(Process(target=trainOnExperienceBatch, args=(parameters, path, expReplayer, stepChunk)))
-        for trainer in trainers:
-            trainer.start()
-        # Use worker pool to collect experiences
-        collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path)
-        for trainer in trainers:
-            trainer.join()
-        terminateExperienceCollectors(collectors)
-        # Check if 1% of training time has elapsed
-        if step >= currentPart + smallPart:
-            currentPart = step - (step % smallPart)
-            percentPrint = (step - (step % smallPart)) / parameters.MAX_TRAINING_STEPS * 100
-            print("Trained: ", int(percentPrint), "%")
-
-    # Final testing for when model has completed training
+    trainer.start()
+    while True:
+        # Check if trainer has sent a signal threw the pipe connection
+        if master_conn.poll():
+            trainer_signal = master_conn.recv()
+            # Check if it is time for testing (starts at 0%)
+            if trainer_signal == "TEST":
+                testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
+                exportTestResults(testResults, path, parameters, testInterval)
+            # Create or re-initialize worker pool every 'n' amount of training steps
+            if trainer_signal == "RELOAD_COLLECTOR":
+                terminateExperienceCollectors(collectors)
+                collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder,
+                                                       loadModel, path)
+            # Check if 1% of training time has elapsed
+            if trainer_signal == "PRINT_TRAIN_PROGRESS":
+                currentPart += smallPart
+                percentPrint = currentPart / parameters.MAX_TRAINING_STEPS * 100
+                print("Trained: ", int(percentPrint), "%")
+            if trainer_signal == "DONE":
+                terminateExperienceCollectors()
+                trainer.join(timeout=0.001)
+                break
+    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("Training done.\n")
+    # Testing for when training time == 100%
     testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
     exportTestResults(testResults, path, parameters, testInterval)
-    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-    print("Training done.")
-    print("")
 
 
 def run():
@@ -931,6 +957,7 @@ def run():
         modifyParameterValue(tweakedTotal, modelPath)
 
     # Initialize network while number of humans is determined
+    print("\nInitializing network...\n")
     p = Process(target=createNetwork, args=(parameters, modelPath))
     p.start()
 
@@ -945,13 +972,12 @@ def run():
     # End network init parallel process
     p.join()
 
-
-    testResults = []
+    startTime = time.time()
     if numberOfHumans == 0:
-        trainingProcedure(testResults, parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
+        trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
     else:
         pass
-
+    print("\nTraining proceedure time elapsed: " + str(time.time()-startTime))
     if parameters.ENABLE_TRAINING:
         runFinalTests(modelPath, parameters, packageName)
         quit()
