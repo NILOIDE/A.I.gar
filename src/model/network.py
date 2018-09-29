@@ -393,8 +393,8 @@ class Network(object):
     def load(self, modelName):
         path = modelName
         self.loadedModelName = modelName
-        self.valueNetwork = keras.models.load_model(str(path) + "model.h5")
-        self.targetNetwork = load_model(path + "model.h5")
+        self.valueNetwork = keras.models.load_model(str(path) + "models/model.h5")
+        self.targetNetwork = load_model(path + "models/model.h5")
 
 
     def trainOnBatch(self, inputs, targets, importance_weights):
@@ -418,6 +418,8 @@ class Network(object):
 
     def updateTargetNetwork(self):
         self.targetNetwork.set_weights(self.valueNetwork.get_weights())
+        if __debug__:
+            print("Target Network updated.")
 
     def predict(self, state, batch_len=1):
         if self.parameters.NEURON_TYPE == "LSTM":
@@ -492,8 +494,10 @@ class Network(object):
                 return self.predict_action_network(state)
 
     def saveModel(self, path, name=""):
+        if not os.path.exists(path + "models/"):
+            os.mkdir(path + "models/")
         self.targetNetwork.set_weights(self.valueNetwork.get_weights())
-        self.targetNetwork.save(path + name + "model.h5")
+        self.targetNetwork.save(path + "models/" + name + "model.h5")
 
     def setEpsilon(self, val):
         self.epsilon = val

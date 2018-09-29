@@ -328,9 +328,29 @@ def defineScreenSize(humansNr):
     return SCREEN_WIDTH, SCREEN_HEIGHT
 
 
-def createNetwork(parameters, path, name=""):
+def elapsedTimeText(startTime):
+    secondsElapsed = int(startTime - time.time())
+    seconds_print = secondsElapsed % 60
+    minutesElapsed = int(secondsElapsed / 60)
+    minutes_print = minutesElapsed % 60
+    hoursElapsed = int(minutesElapsed / 60)
+    return str(hoursElapsed) + "h : " + str(minutes_print) + "m : " + str(seconds_print) + "s"
+
+
+def printTrainProgress(parameters, currentPart, startTime):
+    print("---")
+    smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+    currentPart += smallPart
+    percentPrint = currentPart / parameters.MAX_TRAINING_STEPS * 100
+    print("Trained:        " + str(int(percentPrint)) + "%")
+    timePrint = elapsedTimeText(startTime)
+    print("Time elapsed:   " + timePrint)
+    print("---")
+    return currentPart
+
+def createNetwork(parameters, path):
     network = Network(parameters)
-    network.saveModel(path, name)
+    network.saveModel(path)
 
 
 def createHumans(numberOfHumans, model1):
@@ -386,6 +406,23 @@ def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, 
     testParameters.NUM_RAND_BOTS = num_rand_bots
     return testParameters
 
+
+def finalPathName(parameters, path):
+    steps = parameters.MAX_TRAINING_STEPS
+    path = path[:-1]
+    suffix = ""
+    if steps >= 1000000000:
+        suffix = "B"
+        steps = int(steps / 1000000000)
+    elif steps >= 1000000:
+        suffix = "M"
+        steps = int(steps / 1000000)
+    elif steps >= 1000:
+        suffix = "K"
+        steps = int(steps / 1000)
+    updatedPath = path + "_" + str(steps) + suffix + "/"
+    os.rename(path, updatedPath)
+    return updatedPath
 
 # Export test result data into .txt files
 def exportResults(results, path, name):
@@ -594,7 +631,7 @@ def runFinalTests(path, parameters, packageName):
                   "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": path,
                   "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
         plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
-    print("\nTesting completed.")
+    print("\nFinal testing completed.")
     print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
 
 
@@ -738,10 +775,10 @@ def createLearner(parameters, path):
     return learningAlg
 
 
-def train(parameters, expReplayer, learningAlg):
+def train(parameters, expReplayer, learningAlg, step):
     # TODO: Use GPU
     batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
-    idxs, priorities, updated_actions = learningAlg.learn(batch)
+    idxs, priorities, updated_actions = learningAlg.learn(batch, step)
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
         if parameters.OCACLA_REPLACE_TRANSITIONS:
@@ -756,24 +793,46 @@ def trainOnExperiences(parameters, expReplayer, path, connection):
     learningAlg = createLearner(parameters, path)
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    stepChunk = parameters.NETWORK_UPDATE_STEPS
+    coll_stepChunk = parameters.NETWORK_UPDATE_STEPS
+    targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     for step in range(parameters.MAX_TRAINING_STEPS):
         if __debug__:
-            print("Current replay buffer size: ", len(expReplayer))
-            print("Steps before target network update: ", step, "Target network update interval: ", stepChunk)
+            if step % 2 == 0:
+                print("__________________________________________________________")
+                print("Current replay buffer size:              " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
+                coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
+                print("Steps before collector network update:    " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk))
+                test_stepsLeft = testInterval - (step % testInterval)
+                print("Steps before collector network update:    " + str(test_stepsLeft) + " | Total: " + str(testInterval))
+                targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
+                print("Steps before target network update:       " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) )
+                print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
         # Check if testing should happen
         if parameters.ENABLE_TESTING and step % testInterval == 0:
+            if __debug__:
+                print("Trainer sending signal: 'TEST'")
             connection.send("TEST")
+        # Check if copy of network weights should be saved
+        if step % parameters.NETWORK_SAVE_PERCENT_STEPS == 0:
+            # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
+            learningAlg.save(path, str(step) + "_")
         # Check if collectors should have their networks reloaded
-        if step != 0 and step % stepChunk == 0:
+        if step != 0 and step % coll_stepChunk == 0:
+            if __debug__:
+                print("Trainer sending signal: 'RELOAD_COLLECTOR'")
             connection.send("RELOAD_COLLECTOR")
-
-        train(parameters, expReplayer, learningAlg)
+        # Train 1 step
+        train(parameters, expReplayer, learningAlg, step)
         # Check if we should print the training progress percentage
         if step != 0 and step % smallPart == 0:
+            if __debug__:
+                print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             connection.send("PRINT_TRAIN_PROGRESS")
     # Signal that training has finished
+    if __debug__:
+        print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
     connection.send("DONE")
+    learningAlg.save(path, str(parameters.MAX_TRAINING_STEPS) + "_")
 
 
 # Create the asynchronous training procedure.
@@ -785,7 +844,7 @@ def trainOnExperiences(parameters, expReplayer, path, connection):
 # subprocesses collect experiences. After a given amount of training steps, collector subprocesses are killed and
 # re-initialized with a more up-to-date version of the network.
 # Every a certain amount of training, testing is done. This also happens with the training status being printed.
-def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName):
+def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName, startTime):
     # TODO: check if I implemented ExpReplayer correctly
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         MyManager.register('ExpReplayer', PrioritizedReplayBuffer, TestProxy)
@@ -804,7 +863,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
 
     # Perform simultaneous experiencing and training
     testResults = []
-    collectors = None
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
@@ -833,20 +891,23 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             trainer_signal = master_conn.recv()
             # Check if it is time for testing (starts at 0%)
             if trainer_signal == "TEST":
+                print("Master received signal: 'TEST'")
                 testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
                 exportTestResults(testResults, path, parameters, testInterval)
             # Create or re-initialize worker pool every 'n' amount of training steps
             if trainer_signal == "RELOAD_COLLECTOR":
+                print("Master received signal: 'RELOAD_COLLECTOR'")
                 terminateExperienceCollectors(collectors)
                 collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder,
                                                        loadModel, path)
             # Check if 1% of training time has elapsed
             if trainer_signal == "PRINT_TRAIN_PROGRESS":
-                currentPart += smallPart
-                percentPrint = currentPart / parameters.MAX_TRAINING_STEPS * 100
-                print("Trained: ", int(percentPrint), "%")
+                print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
+                currentPart = printTrainProgress(parameters, currentPart, startTime)
+
             if trainer_signal == "DONE":
-                terminateExperienceCollectors()
+                print("Master received signal: 'DONE'")
+                terminateExperienceCollectors(collectors)
                 trainer.join(timeout=0.001)
                 break
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
@@ -854,6 +915,7 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     # Testing for when training time == 100%
     testResults.append(testingProcedure(path, parameters, packageName, parameters.DUR_TRAIN_TEST_NUM)[0])
     exportTestResults(testResults, path, parameters, testInterval)
+    currentPart = printTrainProgress(parameters, currentPart, startTime)
 
 
 def run():
@@ -974,39 +1036,19 @@ def run():
 
     startTime = time.time()
     if numberOfHumans == 0:
-        trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName)
+        trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName, startTime)
     else:
         pass
-    print("\nTraining proceedure time elapsed: " + str(time.time()-startTime))
     if parameters.ENABLE_TRAINING:
         runFinalTests(modelPath, parameters, packageName)
-        quit()
-        model.save(True)
-        model.saveModels()
+        modelPath = finalPathName(parameters, modelPath)
+        print("--------")
+        print("Total time elapsed:               " + elapsedTimeText(startTime))
+        print("Total average time per update:    " + str((time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + "seconds")
+        print("--------")
         if model_in_subfolder:
             print(os.path.join(modelPath))
             createCombinedModelGraphs(os.path.join(modelPath))
-
-        print("Total average time per update: ", round(numpy.mean(model.timings), 5))
-
-        for bot_idx, bot in enumerate([bot for bot in model.getBots() if bot.getType() == "NN"]):
-            player = bot.getPlayer()
-            print("")
-            print("Network parameters for ", player, ":")
-            attributes = dir(parameters)
-            for attribute in attributes:
-                if not attribute.startswith('__'):
-                    print(attribute, " = ", getattr(parameters, attribute))
-            print("")
-            print("Mass Info for ", player, ":")
-            massListPath = model.getPath() + "/data/" +  model.getDataFiles()["NN" + str(bot_idx) + "_mass"]
-            with open(massListPath, 'r') as f:
-                massList = list(map(float, f))
-            mean = numpy.mean(massList)
-            median = numpy.median(massList)
-            variance = numpy.std(massList)
-            print("Median = ", median, " Mean = ", mean, " Std = ", variance)
-            print("")
 
 if __name__ == '__main__':
     run()

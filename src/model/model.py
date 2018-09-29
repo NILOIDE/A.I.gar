@@ -55,7 +55,6 @@ class Model(object):
         self.parameters = parameters
         self.virusEnabled = parameters.VIRUS_SPAWN
         self.resetLimit = parameters.RESET_LIMIT
-        self.trainingEnabled = False
         self.path = None
         self.superPath = None
         self.startTime = None
@@ -116,8 +115,6 @@ class Model(object):
         timeProcessStart = time.process_time()
         # Get the decisions of the bots. Update the field accordingly.
         self.takeBotActions()
-        if self.trainingEnabled:
-            self.trainOnExperiences()
         self.field.update()
         # Update view if view is enabled
         if self.guiEnabled and self.viewEnabled:
@@ -126,53 +123,21 @@ class Model(object):
         if self.humans:
             time.sleep(max( (1/FPS) - (time.time() - timeStart),0))
 
-        # Store debug info and display progress
-        if self.trainingEnabled and "NN" in [bot.getType() for bot in self.bots]:
-            self.storeRewardsAndTDError()
-            self.timings.append(time.process_time() - timeProcessStart)
+        # # Store debug info and display progress
+        # if self.trainingEnabled and "NN" in [bot.getType() for bot in self.bots]:
+        #     self.storeRewardsAndTDError()
+        #     self.timings.append(time.process_time() - timeProcessStart)
 
-        if self.trainingEnabled and self.counter % 1000 == 0:
-            self.visualize()
+        # if self.trainingEnabled and self.counter % 1000 == 0:
+        #     self.visualize()
 
         # Save the models occasionally in case the program crashes at some point
-        if self.trainingEnabled and self.counter != 0 and self.counter % max(self.resetLimit, 2500) == 0:
-            self.saveSpecs()
-            self.saveModels()
-            if self.counter != 0 and self.counter % max(self.resetLimit*5, 12500) == 0:
-                self.save()
+        # if self.trainingEnabled and self.counter != 0 and self.counter % max(self.resetLimit, 2500) == 0:
+        #     self.saveSpecs()
+        #     self.saveModels()
+        #     if self.counter != 0 and self.counter % max(self.resetLimit*5, 12500) == 0:
+        #         self.save()
 
-    def trainOnExperiences(self):
-        time = self.counter/(self.parameters.FRAME_SKIP_RATE + 1)
-        # Do not train if we are waiting
-        if time % self.parameters.TRAINING_WAIT_TIME != 0:
-            return
-        nnBot = self.getNNBot()
-        expReplayer = nnBot.getExpReplayer()
-        learningAlg = nnBot.getLearningAlg()
-        if (len(expReplayer) >= self.parameters.MEMORY_BATCH_LEN
-                 or not self.parameters.EXP_REPLAY_ENABLED):
-            train_len = int(self.parameters.TRAINING_PHASE_LEN)
-            if __debug__:
-                print("Training on experiences " + str(train_len) + " times...")
-            count = 0
-            for i in range(train_len):
-                if self.parameters.EXP_REPLAY_ENABLED:
-                    batch = expReplayer.sample(self.parameters.MEMORY_BATCH_LEN)
-                else:
-                    batch = nnBot.getLastMemory
-                idxs, priorities, updated_actions = learningAlg.learn(batch, time)
-                if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-                    expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
-                    if self.parameters.OCACLA_REPLACE_TRANSITIONS:
-                        if updated_actions is not None:
-                            expReplayer.update_dones(idxs, updated_actions)
-                        else:
-                            print("Updated actions is None!")
-                if i > 0 and i % (train_len//10) == 0:
-                    count += 10
-                    print("Train phase - " + str(count) + "%")
-
-            learningAlg.updateNetworks(time)
 
     # def storeRewardsAndTDError(self):
     #     errors = []
@@ -211,28 +176,28 @@ class Model(object):
     #         self.dataFiles.update({botName  + "_qValue": qvalueFileName})
 
 
-    # def saveModels(self, end = False):
-    #     savedTypes = []
-    #     for bot in self.bots:
-    #         botType = bot.getType()
-    #         if botType == "NN" and botType not in savedTypes:
-    #             bot.saveModel(self.path)
-    #             savedTypes.append(botType)
-    #     if end:
-    #         path = self.path[:-1]
-    #         suffix = ""
-    #         if self.counter >= 1000000000:
-    #             suffix = "B"
-    #             self.counter = int(self.counter / 1000000000)
-    #         elif self.counter >= 1000000:
-    #             suffix = "M"
-    #             self.counter = int(self.counter / 1000000)
-    #         elif self.counter >= 1000:
-    #             suffix = "K"
-    #             self.counter = int(self.counter / 1000)
-    #         updatedPath = path + "_" + str(self.counter) + suffix
-    #         os.rename(path, updatedPath)
-    #         self.path = updatedPath + "/"
+    def saveModels(self, end = False):
+        savedTypes = []
+        for bot in self.bots:
+            botType = bot.getType()
+            if botType == "NN" and botType not in savedTypes:
+                bot.saveModel(self.path)
+                savedTypes.append(botType)
+        if end:
+            path = self.path[:-1]
+            suffix = ""
+            if self.counter >= 1000000000:
+                suffix = "B"
+                self.counter = int(self.counter / 1000000000)
+            elif self.counter >= 1000000:
+                suffix = "M"
+                self.counter = int(self.counter / 1000000)
+            elif self.counter >= 1000:
+                suffix = "K"
+                self.counter = int(self.counter / 1000)
+            updatedPath = path + "_" + str(self.counter) + suffix
+            os.rename(path, updatedPath)
+            self.path = updatedPath + "/"
 
     # def saveSpecs(self, end = False):
     #     # Save any additional info on this training

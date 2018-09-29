@@ -179,17 +179,12 @@ class QLearn(object):
 
         return idxs, priorities
 
-    def learn(self, batch):
+    def learn(self, batch, step):
         idxs, priorities =  self.train(batch)
-
+        if step % self.parameters.TARGET_NETWORK_STEPS == 0:
+            self.updateNetworks()
         self.latestTDerror = numpy.mean(priorities[-1])
         return idxs, priorities, None
-
-    def getNoise(self):
-        return self.epsilon
-
-    def setNoise(self, val):
-        self.epsilon = val
 
     def updateNoise(self):
         self.epsilon *= self.parameters.NOISE_DECAY
@@ -197,14 +192,12 @@ class QLearn(object):
         if self.parameters.END_DISCOUNT:
             self.discount = 1 - self.parameters.DISCOUNT_INCREASE_FACTOR * (1 - self.discount)
 
-    def updateNetworks(self, time):
-        self.updateTargetModel(time)
-        #self.updateActionModel(time)
+    def updateNetworks(self):
+        self.updateTargetModel()
+        #self.updateActionModel()
 
-    def updateTargetModel(self, time):
-        if time % self.parameters.TARGET_NETWORK_STEPS == 0:
-           self.network.updateTargetNetwork()
-
+    def updateTargetModel(self):
+        self.network.updateTargetNetwork()
 
     def decideExploration(self, bot):
         if self.parameters.EXPLORATION_STRATEGY == "e-Greedy":
@@ -247,6 +240,12 @@ class QLearn(object):
 
     def save(self, path, name = ""):
         self.network.saveModel(path, name)
+
+    def getNoise(self):
+        return self.epsilon
+
+    def setNoise(self, val):
+        self.epsilon = val
 
     def setTemperature(self, val):
         self.temperature = val
