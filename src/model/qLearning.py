@@ -1,6 +1,7 @@
 import numpy
 import heapq
 import math
+import time
 from .network import Network
 from keras import backend as K
 
@@ -180,7 +181,10 @@ class QLearn(object):
         return idxs, priorities
 
     def learn(self, batch, step):
+        startTime = time.time()
         idxs, priorities =  self.train(batch)
+        print("Train time:  " + str.format('{0:.3f}', time.time() - startTime) + "s")
+
         if step % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.updateNetworks()
         self.latestTDerror = numpy.mean(priorities[-1])

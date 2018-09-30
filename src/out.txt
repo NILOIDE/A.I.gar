@@ -1,0 +1,19 @@
+Enable GUI?: (1 == yes)
+Do you want to load a model? (1 == yes)
+Do you want to tweak parameters? (1 == yes)
+Give saveModel folder a custom name? (1 == yes)
+Path:  savedModels/$Sep-30_20:11$/
+Created new path: savedModels/$Sep-30_20:11$/
+
+Initializing network...
+
+
+******************************************************************
+Beginning initial experience collection...
+
+***********************************************************
+Initializing collectors...
+Collectors initialized.
+Initialization time elapsed:   0.002s
+***********************************************************
+Initializing model...

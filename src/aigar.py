@@ -17,7 +17,7 @@ from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
 import pathos.multiprocessing as mp
-from multiprocessing import Process, Pipe
+from multiprocessing import Process, Queue, Manager, active_children
 from multiprocessing.managers import BaseManager, NamespaceProxy
 from time import sleep
 
@@ -509,7 +509,7 @@ def performTest(path, testParams, testSteps):
 # Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
 # The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
 def testModel(path, name, plotName, testParams, n_tests, currentTest):
-    print("\n------------------------------------------------------------------")
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     print("Testing", name, "...\n")
 
     start = time.time()
@@ -525,11 +525,11 @@ def testModel(path, name, plotName, testParams, n_tests, currentTest):
     #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
     pool = mp.Pool(n_tests)
     print("Initializing " + str(n_tests) + " testers..." )
-    print("------------------------------------------------------------------\n")
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
     testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
     pool.close()
     pool.join()
-    print("\n------------------------------------------------------------------")
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     print(str(currentTest*testParams.TRAIN_PERCENT_TEST_INTERVAL) + "% test's " + name + " runs finished.\n" )
     for result in testResults:
         print("Process id #" + str(result[3]) + "'s test run:" +
@@ -537,9 +537,9 @@ def testModel(path, name, plotName, testParams, n_tests, currentTest):
               "\n   Mean mass: " + str(result[1]) +
               "\n   Max mass: " + str(result[2]) +
               "\n")
-    print("Number of tests: " + str(n_tests) +
-          "\nTime elapsed: " + str.format('{0:.3f}', time.time() - start) + "s")
-    print("------------------------------------------------------------------\n")
+    print("Number of tests:   " + str(n_tests) + "\n"
+          "Time elapsed:      " + str.format('{0:.3f}', time.time() - start) + "s")
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
 
     masses = []
     meanMasses = []
@@ -559,7 +559,7 @@ def testModel(path, name, plotName, testParams, n_tests, currentTest):
     return evals, masses
 
 
-def testingProcedure(path, parameters, packageName, currentTest, n_tests, connection):
+def testingProcedure(path, parameters, packageName, currentTest, n_tests, testResults=None, tester_queue=None):
     # currentAlg = model.getNNBot().getLearningAlg()
     # originalNoise = currentAlg.getNoise()
     # currentAlg.setNoise(0)
@@ -596,18 +596,21 @@ def testingProcedure(path, parameters, packageName, currentTest, n_tests, connec
     #     currentAlg.setTemperature(originalTemp)
     if __debug__:
         print("Tester process sending data...")
-    connection.send((testEvals, masses))
+    # This is for the case that this function is called without the need for parallelism (i.e. Final tests)
+    if testResults is None:
+        return testEvals, masses
+    # Do this if testing procedure is being done in parallel
+    else:
+        # Append testEvals dictionary to list manager
+        testResults.append(testEvals)
+        # Put signal in queue so that Master process knows that this process should be terminated
+        tester_queue.put(currentTest)
 
 
 def runFinalTests(path, parameters, packageName):
     print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
     print("Performing final tests...\n")
-    master_conn, tester_conn = Pipe()
-    tester_process = Process(target=testingProcedure, args=(path, parameters, packageName, "Final",
-                                                            parameters.DUR_TRAIN_TEST_NUM, tester_conn))
-    tester_process.start()
-    evals, masses = master_conn.recv()
-    tester_process.join()
+    evals, masses = testingProcedure(path, parameters, packageName, "Final", parameters.DUR_TRAIN_TEST_NUM)
     # TODO: add more test scenarios for multiple greedy bots and full model check
 
     name_of_file = path + "/final_results.txt"
@@ -733,26 +736,39 @@ def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, l
 
 
 def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
+    if __debug__:
+        print("***********************************************************")
+        startTime = time.time()
+        print("Initializing collectors...")
     numWorkers = parameters.NUM_COLLECTORS
     if numWorkers <= 0:
         print("Number of concurrent games must be a positive integer.")
         quit()
     collectors = []
-    print("Starting collectors...")
     for processNum in range(numWorkers):
         p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, model_in_subfolder, loadModel, path))
         p.start()
         collectors.append(p)
+    if __debug__:
+        print("Collectors initialized.")
+        print("Initialization time elapsed:   " + str.format('{0:.3f}', time.time() - startTime) + "s")
+        print("***********************************************************")
     return collectors
 
 
 def terminateExperienceCollectors(collectors):
-    print("Terminating collectors...")
+    if __debug__:
+        print("***********************************************************")
+        startTime = time.time()
+        print("Terminating collectors...")
     for p in collectors:
         p.terminate()
         # if not p.is_alive():
         p.join(timeout=0.001)
-
+    if __debug__:
+        print("Collectors terminated.")
+        print("Termination time elapsed:   " + str.format('{0:.3f}', time.time() - startTime) + "s")
+        print("***********************************************************")
 
 class MyManager(BaseManager): pass
 
@@ -798,15 +814,17 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(parameters, expReplayer, path, connection):
+def trainOnExperiences(parameters, expReplayer, path, queue):
     learningAlg = createLearner(parameters, path)
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     coll_stepChunk = parameters.NETWORK_UPDATE_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
+    timeStep = time.time()
+    printSteps = 10
     for step in range(parameters.MAX_TRAINING_STEPS):
         if __debug__:
-            if step % 5 == 0:
+            if step != 0 and step % printSteps == 0:
                 print("__________________________________________________________")
                 print("Current replay buffer size:              " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
                 coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
@@ -815,12 +833,14 @@ def trainOnExperiences(parameters, expReplayer, path, connection):
                 print("Steps before next test:                   " + str(test_stepsLeft) + " | Total: " + str(testInterval))
                 targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
                 print("Steps before target network update:       " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) )
-                print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
+                print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', time.time() - timeStep) + "s")
+                print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨\n")
+                timeStep = time.time()
         # Check if testing should happen
         if parameters.ENABLE_TESTING and step % testInterval == 0:
             if __debug__:
                 print("Trainer sending signal: 'TEST'")
-            connection.send("TEST")
+            queue.put("TEST")
         # Check if copy of network weights should be saved
         if step % parameters.NETWORK_SAVE_PERCENT_STEPS == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
@@ -829,18 +849,18 @@ def trainOnExperiences(parameters, expReplayer, path, connection):
         if step != 0 and step % coll_stepChunk == 0:
             if __debug__:
                 print("Trainer sending signal: 'RELOAD_COLLECTOR'")
-            connection.send("RELOAD_COLLECTOR")
+            queue.put("RELOAD_COLLECTOR")
         # Train 1 step
         train(parameters, expReplayer, learningAlg, step)
         # Check if we should print the training progress percentage
         if step != 0 and step % smallPart == 0:
             if __debug__:
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
-            connection.send("PRINT_TRAIN_PROGRESS")
+            queue.put("PRINT_TRAIN_PROGRESS")
     # Signal that training has finished
     if __debug__:
         print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
-    connection.send("DONE")
+    queue.put("DONE")
     learningAlg.save(path, str(parameters.MAX_TRAINING_STEPS) + "_")
 
 
@@ -870,20 +890,24 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     # expReplayer = ExpReplay(parameters)
 
 
-    # Perform simultaneous experiencing and training
-    testResults = []
+    # Perform simultaneous experience collection and training
+    if parameters.ENABLE_TESTING:
+        testResults_manager = Manager()
+        testResults = testResults_manager.list()
+        testerSignal_queue = Queue()
+        testerDict = {}
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     testsPerformed = 0
     # TODO: Create multiple learners
     # Create training process and communication pipe
-    masterToTrainer_conn, trainer_conn = Pipe()
-    testerList = []
-    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainer_conn))
+    trainerSignal_queue = Queue()
+    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainerSignal_queue))
     # Gather initial experiences
     print("\n******************************************************************")
-    print("Beggining to initial experience collection...\n")
+    print("Beginning initial experience collection...\n")
+    collectionTime = time.time()
     collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel,
                                            path)
     # TODO: Start with buffer completely full?
@@ -892,72 +916,99 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
         pass
     print("Initial experience collection completed.")
-    print("Current replay buffer size: ", len(expReplayer))
+    print("Current replay buffer size:   ", len(expReplayer))
+    print("Collection time elapsed:      " + str(time.time()-collectionTime))
     print("\nBeggining to train...")
     print("////////////////////////////////////////////////////////////////////\n")
     trainer.start()
-    done = False
     while True:
         # Check if trainer has sent a signal threw the pipe connection
-        if masterToTrainer_conn.poll():
-            trainer_signal = masterToTrainer_conn.recv()
-            # Check if it is time for testing (starts at 0%)
-            if trainer_signal == "TEST":
-                if __debug__:
-                    print("Master received signal: 'TEST'")
-                    print("Tester list length: " + str(len(testerList)))
-                # Start tester_process in order for testing to happen in parallel
-                # (this assumes previous tester will have joined by now)
-                tester = {}
-                tester["Master_conn"], tester["Tester_conn"] = Pipe()
-                tester["Process"] = Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
-                                                                           parameters.DUR_TRAIN_TEST_NUM, tester["Tester_conn"]))
-                tester["Process"].start()
-                testerList.append(tester)
-                testsPerformed += 1
-            # Create or re-initialize worker pool every 'n' amount of training steps
-            if trainer_signal == "RELOAD_COLLECTOR":
-                if __debug__:
-                    print("Master received signal: 'RELOAD_COLLECTOR'")
-                terminateExperienceCollectors(collectors)
-                collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder,
-                                                       loadModel, path)
-            # Check if 1% of training time has elapsed
-            if trainer_signal == "PRINT_TRAIN_PROGRESS":
-                if __debug__:
-                    print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
-                currentPart = printTrainProgress(parameters, currentPart, startTime)
-            # When trainer signals training is 'DONE', terminate child processes (collectors and trainer) and break
-            if trainer_signal == "DONE":
-                if __debug__:
-                    print("Master received signal: 'DONE'")
-                terminateExperienceCollectors(collectors)
-                trainer.join(timeout=0.001)
-                done = True
-        # If tester
-        for t in testerList:
-            if t["Master_conn"].poll():
-                testResults.append(t["Master_conn"].recv()[0])
-                if __debug__:
-                    print("Master received tester's data...")
-                t["Process"].join()
-                exportTestResults(testResults, path, parameters, testInterval)
-                testerList.remove(t)
-        if done and len(testerList) == 0:
+        trainer_signal = trainerSignal_queue.get()
+        # Check if it is time for testing (starts at 0%)
+        if trainer_signal == "TEST":
+            if __debug__:
+                print("Master received signal: 'TEST'")
+            # Start tester_process in order for testing to happen in parallel. Tester automatically appends testResults
+            # to testResults list manager within process and notifies Master process of being done through the tester queue.
+            tester = Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
+                                                            parameters.DUR_TRAIN_TEST_NUM, testResults, testerSignal_queue))
+            tester.start()
+            testerDict[testsPerformed] = tester
+            testsPerformed += 1
+        # Create or re-initialize worker pool every 'n' amount of training steps
+        if trainer_signal == "RELOAD_COLLECTOR":
+            if __debug__:
+                print("Master received signal: 'RELOAD_COLLECTOR'")
+            terminateExperienceCollectors(collectors)
+            collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder,
+                                                   loadModel, path)
+        # Check if 1% of training time has elapsed
+        if trainer_signal == "PRINT_TRAIN_PROGRESS":
+            if __debug__:
+                print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
+            currentPart = printTrainProgress(parameters, currentPart, startTime)
+        # When trainer signals training is 'DONE', terminate child processes (collectors and trainer) and break
+        if trainer_signal == "DONE":
+            if __debug__:
+                print("Master received signal: 'DONE'")
+            terminateExperienceCollectors(collectors)
+            trainer.join(timeout=0.001)
             break
+
+        if __debug__:
+            print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
+            children = active_children()
+            print("Number of alive child processes:    " + str(len(children)))
+            for p in children:
+                print(p)
+            # print("--------")
+        #     print(trainer)
+        #     for c in collectors:
+        #         print(c)
+        #     for t in testerDict:
+        #         print(testerDict[t])
+        #     print(testResults_manager)
+        #     print(manager)
+            print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
+
+        if parameters.ENABLE_TESTING:
+            if __debug__:
+                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                print("Number of ongoing testers: " + str(len(testerDict)))
+                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            # If a tester has notified Master that it has finished it's work, Master will receive this signal from the
+            # tester queue and will join and delete the tester
+            while not testerSignal_queue.empty():
+                doneTester = testerSignal_queue.get()
+                if testerDict[doneTester].is_alive():
+                    testerDict[doneTester].join(timeout = 0.001)
+                    print("Did this join?-----------------------------------")
+                testerDict.pop(doneTester)
+                exportTestResults(testResults, path, parameters, testInterval)
+                if __debug__:
+                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                    print("Tester #" + str(doneTester) + " (" + str(doneTester*5) + "%) was joined by Master.")
+                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.\n")
     # Testing for when training time == 100%
     if parameters.ENABLE_TESTING:
-        tester = {}
-        tester["Master_conn"], tester["Tester_conn"] = Pipe()
-        tester["Process"] = Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
-                                                                parameters.DUR_TRAIN_TEST_NUM, tester["Tester_conn"]))
-        tester["Process"].start()
+        tester = Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
+                                                                parameters.DUR_TRAIN_TEST_NUM, testResults, testerSignal_queue))
+        tester.start()
+        testerDict[testsPerformed] = tester
         if __debug__:
             print("Master awaiting final tester's data...")
-        testResults.append(tester["Master_conn"].recv()[0])
+        # While tester processes are still ongoing keep checking tester termination queue
+        while testerDict:
+            doneTester = testerSignal_queue.get()
+            if testerDict[doneTester].is_alive():
+                testerDict[doneTester].join(timeout = 0.001)
+                print("Did this join?-----------------------------------")
+            testerDict.pop(doneTester)
+            if __debug__:
+                print("Tester #" + str(doneTester)) + " was joined by Master."
         if __debug__:
             print("Received final tester's data.")
         tester["Process"].join()
