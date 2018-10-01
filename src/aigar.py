@@ -844,7 +844,10 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
         # Check if copy of network weights should be saved
         if step % parameters.NETWORK_SAVE_PERCENT_STEPS == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
+            # Save this instance of the network with number of trained steps in the name
             learningAlg.save(path, str(step) + "_")
+            # Update model.h5 network file
+            learningAlg.save(path)
         # Check if collectors should have their networks reloaded
         if step != 0 and step % coll_stepChunk == 0:
             if __debug__:
@@ -974,7 +977,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
                 doneTester = testerSignal_queue.get()
                 if testerDict[doneTester].is_alive():
                     testerDict[doneTester].join(timeout = 0.001)
-                    print("Did this join?-----------------------------------")
                 testerDict.pop(doneTester)
                 exportTestResults(testResults, path, parameters, testInterval)
                 if __debug__:
@@ -997,7 +999,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             doneTester = testerSignal_queue.get()
             if testerDict[doneTester].is_alive():
                 testerDict[doneTester].join(timeout = 0.001)
-                print("Did this join?-----------------------------------")
             testerDict.pop(doneTester)
             if __debug__:
                 print("Tester #" + str(doneTester) + " (" + str(doneTester*5) + "%) was joined by Master.")
