@@ -818,7 +818,7 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
     learningAlg = createLearner(parameters, path)
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    coll_stepChunk = parameters.NETWORK_UPDATE_STEPS
+    coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     timeStep = time.time()
     printSteps = 10
@@ -844,10 +844,11 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
         # Check if copy of network weights should be saved
         if step % parameters.NETWORK_SAVE_PERCENT_STEPS == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
-            # Save this instance of the network with number of trained steps in the name
-            learningAlg.save(path, str(step) + "_")
             # Update model.h5 network file
             learningAlg.save(path)
+            if step % parameters.NETWORK_COPY_PERCENT_STEPS == 0:
+                # Save this instance of the network with number of trained steps in the name
+                learningAlg.save(path, str(step) + "_")
         # Check if collectors should have their networks reloaded
         if step != 0 and step % coll_stepChunk == 0:
             if __debug__:
