@@ -961,14 +961,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             print("Number of alive child processes:    " + str(len(children)))
             for p in children:
                 print(p)
-            # print("--------")
-        #     print(trainer)
-        #     for c in collectors:
-        #         print(c)
-        #     for t in testerDict:
-        #         print(testerDict[t])
-        #     print(testResults_manager)
-        #     print(manager)
             print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
 
         if parameters.ENABLE_TESTING:
@@ -1008,10 +1000,9 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
                 print("Did this join?-----------------------------------")
             testerDict.pop(doneTester)
             if __debug__:
-                print("Tester #" + str(doneTester)) + " was joined by Master."
+                print("Tester #" + str(doneTester) + " (" + str(doneTester*5) + "%) was joined by Master.")
         if __debug__:
             print("Received final tester's data.")
-        tester["Process"].join()
         exportTestResults(testResults, path, parameters, testInterval)
     _ = printTrainProgress(parameters, currentPart, startTime)
 
