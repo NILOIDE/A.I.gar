@@ -9,7 +9,6 @@ import tensorflow as tf
 import keras.backend as K
 from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization
 from keras.models import Sequential
-from keras.utils.training_utils import multi_gpu_model
 from keras.models import load_model, save_model
 from keras.constraints import maxnorm
 

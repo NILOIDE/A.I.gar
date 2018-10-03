@@ -1,9 +1,10 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
 import sys
 import importlib
 import importlib.util
 import shutil
+import psutil
 import time
 import datetime
 #import pyximport; pyximport.install()
@@ -17,7 +18,7 @@ from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
 import pathos.multiprocessing as mp
-from multiprocessing import Process, Queue, Manager, active_children
+from multiprocessing import Process, Queue, Manager, active_children, Event
 from multiprocessing.managers import BaseManager, NamespaceProxy
 from time import sleep
 
@@ -719,27 +720,32 @@ def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
 
 
 def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, loadModel, modelPath):
+    p = psutil.Process()
+    p.nice(20)
     # Create game instance
     model = Model(False, False, parameters)
     createModelPlayers(parameters, model, modelPath)
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
+    # timeEl = time.time()
     # Run game until terminated
     while True:
         for step in range(parameters.RESET_LIMIT):
             model.update()
+        # print("TIME EL",time.time() - timeEl)
+        # timeEl = time.time()
         gatheredExperiences = [bot.getExperiences() for bot in model.getBots()]
         addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum)
-        # TODO: We can also completely reinitialize the game (maybe OpenAI gym doesn't allow game resetting)
+        # print("Add exp: ", time.time()-timeEl)
+        # timeEl = time.time()
         model.resetModel()
 
 
 def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
-    if __debug__:
-        print("***********************************************************")
-        startTime = time.time()
-        print("Initializing collectors...")
+    startTime = time.time()
+    print("***********************************************************")
+    print("Initializing collectors...")
     numWorkers = parameters.NUM_COLLECTORS
     if numWorkers <= 0:
         print("Number of concurrent games must be a positive integer.")
@@ -749,10 +755,9 @@ def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in
         p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, model_in_subfolder, loadModel, path))
         p.start()
         collectors.append(p)
-    if __debug__:
-        print("Collectors initialized.")
-        print("Initialization time elapsed:   " + str.format('{0:.3f}', time.time() - startTime) + "s")
-        print("***********************************************************")
+    print("Collectors initialized.")
+    print("Initialization time elapsed:   " + str.format('{0:.3f}', time.time() - startTime) + "s")
+    print("***********************************************************")
     return collectors
 
 
@@ -814,18 +819,22 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(parameters, expReplayer, path, queue):
+def trainOnExperiences(parameters, expReplayer, path, queue, signal_event):
+    p = psutil.Process()
+    p.nice(0)
     learningAlg = createLearner(parameters, path)
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
+    network_saveSteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
+    network_copySteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     timeStep = time.time()
     printSteps = 10
     for step in range(parameters.MAX_TRAINING_STEPS):
-        if __debug__:
-            if step != 0 and step % printSteps == 0:
-                print("__________________________________________________________")
+        if step != 0 and step % printSteps == 0:
+            print("__________________________________________________________")
+            if __debug__:
                 print("Current replay buffer size:              " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
                 coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
                 print("Steps before collector network update:    " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk))
@@ -833,20 +842,25 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
                 print("Steps before next test:                   " + str(test_stepsLeft) + " | Total: " + str(testInterval))
                 targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
                 print("Steps before target network update:       " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) )
-                print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', time.time() - timeStep) + "s")
-                print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨\n")
-                timeStep = time.time()
+            print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', time.time() - timeStep) + "s")
+            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨\n")
+            timeStep = time.time()
         # Check if testing should happen
         if parameters.ENABLE_TESTING and step % testInterval == 0:
             if __debug__:
                 print("Trainer sending signal: 'TEST'")
             queue.put("TEST")
+            signal_event.set()
         # Check if copy of network weights should be saved
-        if step % parameters.NETWORK_SAVE_PERCENT_STEPS == 0:
+        if step % network_saveSteps == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
+            if __debug__:
+                print("Saving network...")
             # Update model.h5 network file
             learningAlg.save(path)
-            if step % parameters.NETWORK_COPY_PERCENT_STEPS == 0:
+            if step % network_copySteps == 0:
+                if __debug__:
+                    print("Copying network to new file...")
                 # Save this instance of the network with number of trained steps in the name
                 learningAlg.save(path, str(step) + "_")
         # Check if collectors should have their networks reloaded
@@ -854,6 +868,7 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
             if __debug__:
                 print("Trainer sending signal: 'RELOAD_COLLECTOR'")
             queue.put("RELOAD_COLLECTOR")
+            signal_event.set()
         # Train 1 step
         train(parameters, expReplayer, learningAlg, step)
         # Check if we should print the training progress percentage
@@ -861,10 +876,13 @@ def trainOnExperiences(parameters, expReplayer, path, queue):
             if __debug__:
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             queue.put("PRINT_TRAIN_PROGRESS")
+            signal_event.set()
+        print("----------")
     # Signal that training has finished
     if __debug__:
         print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
     queue.put("DONE")
+    signal_event.set()
     learningAlg.save(path, str(parameters.MAX_TRAINING_STEPS) + "_")
 
 
@@ -904,10 +922,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     testsPerformed = 0
-    # TODO: Create multiple learners
-    # Create training process and communication pipe
-    trainerSignal_queue = Queue()
-    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainerSignal_queue))
     # Gather initial experiences
     print("\n******************************************************************")
     print("Beginning initial experience collection...\n")
@@ -924,9 +938,20 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     print("Collection time elapsed:      " + str(time.time()-collectionTime))
     print("\nBeggining to train...")
     print("////////////////////////////////////////////////////////////////////\n")
+    # Create training process and communication pipe
+    trainerSignal_queue = Queue()
+    # TODO: Create multiple learners
+    trainerSignal_event = Event()
+    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainerSignal_queue, trainerSignal_event))
+
     trainer.start()
+    p = psutil.Process()
+    p.nice(15)
     while True:
         # Check if trainer has sent a signal threw the pipe connection
+        # while trainerSignal_queue.empty():
+        #     sleep(1)
+        trainerSignal_event.wait()
         trainer_signal = trainerSignal_queue.get()
         # Check if it is time for testing (starts at 0%)
         if trainer_signal == "TEST":

@@ -2,7 +2,6 @@ import keras
 import numpy
 import math
 import tensorflow as tf
-from keras.utils.training_utils import multi_gpu_model
 from keras.models import load_model
 from keras import backend as K
 from keras.layers import Conv2D, Flatten, Input, Dense
