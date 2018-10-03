@@ -709,17 +709,7 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
 
-def addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum):
-    if __debug__:
-        print("Collector #" + str(processNum) + " is adding to buffer experiences list of shape: ", np.shape(gatheredExperiences), "\n")
-    for experienceList in gatheredExperiences:
-        for experience in experienceList:
-            # TODO: Make add method nicer by taking entire memory as argument?
-            expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
-    return expReplayer
-
-
-def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, loadModel, modelPath):
+def performModelSteps(parameters, experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
     p = psutil.Process()
     p.nice(20)
     # Create game instance
@@ -728,21 +718,24 @@ def performModelSteps(parameters, expReplayer, processNum, model_in_subfolder, l
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
-    # timeEl = time.time()
     # Run game until terminated
     while True:
         for step in range(parameters.RESET_LIMIT):
             model.update()
-        # print("TIME EL",time.time() - timeEl)
-        # timeEl = time.time()
-        gatheredExperiences = [bot.getExperiences() for bot in model.getBots()]
-        addExperiencesToBuffer(expReplayer, gatheredExperiences, processNum)
-        # print("Add exp: ", time.time()-timeEl)
-        # timeEl = time.time()
+        all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
+        if __debug__:
+            shape = np.shape(all_experienceLists)
+            print("Collector #" + str(processNum) + " is adding to experience queue " +
+                  str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
+            queueTimer = time.time()
+        for experienceList in all_experienceLists:
+            experience_queue.put(experienceList)
+        if __debug__:
+            print("Collector #" + str(processNum) + " time taken to push experiences to queue: " + str.format('{0:.3f}', time.time()-queueTimer))
         model.resetModel()
 
 
-def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel, path):
+def startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder, loadModel, path):
     startTime = time.time()
     print("***********************************************************")
     print("Initializing collectors...")
@@ -752,7 +745,7 @@ def startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in
         quit()
     collectors = []
     for processNum in range(numWorkers):
-        p = Process(target=performModelSteps, args=(parameters, expReplayer, processNum, model_in_subfolder, loadModel, path))
+        p = Process(target=performModelSteps, args=(parameters, experience_queue, processNum, model_in_subfolder, loadModel, path))
         p.start()
         collectors.append(p)
     print("Collectors initialized.")
@@ -775,24 +768,6 @@ def terminateExperienceCollectors(collectors):
         print("Termination time elapsed:   " + str.format('{0:.3f}', time.time() - startTime) + "s")
         print("***********************************************************")
 
-class MyManager(BaseManager): pass
-
-class TestProxy(NamespaceProxy):
-    # TODO: Make compatible with Prioritized exp replay
-    _exposed_ = ('__getattribute__', '__setattr__', '__delattr__', '__len__', 'add', 'sample', 'updatePriorities' )
-
-    def add(self, obs_t, action, reward, obs_tp1, done):
-        callmethod = object.__getattribute__(self, '_callmethod')
-        return callmethod(self.add.__name__, (obs_t, action, reward, obs_tp1, done))
-
-    def __len__(self):
-        callmethod = object.__getattribute__(self, '_callmethod')
-        return callmethod(self.__len__.__name__)
-
-    def sample(self, batch_size):
-        callmethod = object.__getattribute__(self, '_callmethod')
-        return callmethod(self.sample.__name__, (batch_size,))
-
 
 def createLearner(parameters, path):
     algorithmName = parameters.ALGORITHM
@@ -803,6 +778,14 @@ def createLearner(parameters, path):
         learningAlg = ActorCritic(parameters)
     learningAlg.initializeNetwork(path)
     return learningAlg
+
+
+def addExperiencesToBuffer(expReplayer, experienceList):
+    if __debug__:
+        print("Trainer is adding " + str(len(experienceList)) + " experiences to experience buffer...")
+    for experience in experienceList:
+        # TODO: Make add method nicer by taking entire memory as argument?
+        expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
 
 
 def train(parameters, expReplayer, learningAlg, step):
@@ -819,10 +802,31 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(parameters, expReplayer, path, queue, signal_event):
+def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
+    # Increase priority of this process
     p = psutil.Process()
     p.nice(0)
     learningAlg = createLearner(parameters, path)
+    if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+        expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
+    else:
+        expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
+    # TODO: Uncomment for Anton's LSTM expReplay stuff
+    # expReplayer = ExpReplay(parameters)
+
+    # Collect enough experiences before training
+    print("\n******************************************************************")
+    print("Beginning initial experience collection...\n")
+    collectionTime = time.time()
+    while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
+        addExperiencesToBuffer(expReplayer, experience_queue.get())
+    # TODO: Start with buffer completely full?
+    # TODO: can experiences be added in batch in Prioritized Replay Buffer?
+    print("Initial experience collection completed.")
+    print("Current replay buffer size:   ", len(expReplayer))
+    print("Collection time elapsed:      " + str.format('{0:.3f}', time.time() - collectionTime))
+    print("\nBeggining to train...")
+    print("////////////////////////////////////////////////////////////////////\n")
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
@@ -869,6 +873,12 @@ def trainOnExperiences(parameters, expReplayer, path, queue, signal_event):
                 print("Trainer sending signal: 'RELOAD_COLLECTOR'")
             queue.put("RELOAD_COLLECTOR")
             signal_event.set()
+        # Get collector experiences from Queue and add them to buffer
+        if not experience_queue.empty():
+            queueTimer = time.time()
+            addExperiencesToBuffer(expReplayer, experience_queue.get())
+            if __debug__:
+                print("Trainer time taken to get experiences and add them to expReplay: " + str.format('{0:.3f}', time.time()-queueTimer))
         # Train 1 step
         train(parameters, expReplayer, learningAlg, step)
         # Check if we should print the training progress percentage
@@ -896,22 +906,6 @@ def trainOnExperiences(parameters, expReplayer, path, queue, signal_event):
 # re-initialized with a more up-to-date version of the network.
 # Every a certain amount of training, testing is done. This also happens with the training status being printed.
 def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName, startTime):
-    # TODO: check if I implemented ExpReplayer correctly
-    if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-        MyManager.register('ExpReplayer', PrioritizedReplayBuffer, TestProxy)
-        manager = MyManager()
-        manager.start()
-        expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
-    else:
-        MyManager.register('ExpReplayer', ReplayBuffer, TestProxy)
-        manager = MyManager()
-        manager.start()
-        expReplayer = manager.ExpReplayer(parameters.MEMORY_CAPACITY)
-
-    # TODO: Uncomment for Anton's LSTM expReplay stuff
-    # expReplayer = ExpReplay(parameters)
-
-
     # Perform simultaneous experience collection and training
     if parameters.ENABLE_TESTING:
         testResults_manager = Manager()
@@ -922,35 +916,19 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     testsPerformed = 0
-    # Gather initial experiences
-    print("\n******************************************************************")
-    print("Beginning initial experience collection...\n")
-    collectionTime = time.time()
-    collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder, loadModel,
-                                           path)
-    # TODO: Start with buffer completely full?
-    # TODO: can experiences be added in batch in Prioritized Replay Buffer?
-    # Collect enough experiences before training
-    while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
-        pass
-    print("Initial experience collection completed.")
-    print("Current replay buffer size:   ", len(expReplayer))
-    print("Collection time elapsed:      " + str(time.time()-collectionTime))
-    print("\nBeggining to train...")
-    print("////////////////////////////////////////////////////////////////////\n")
+    experience_queue = Queue()
+    collectors = startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder,
+                                           loadModel, path)
     # Create training process and communication pipe
     trainerSignal_queue = Queue()
     # TODO: Create multiple learners
     trainerSignal_event = Event()
-    trainer = Process(target=trainOnExperiences, args=(parameters, expReplayer, path, trainerSignal_queue, trainerSignal_event))
-
+    trainer = Process(target=trainOnExperiences,
+                      args=(parameters, experience_queue, path, trainerSignal_queue, trainerSignal_event))
     trainer.start()
     p = psutil.Process()
     p.nice(15)
     while True:
-        # Check if trainer has sent a signal threw the pipe connection
-        # while trainerSignal_queue.empty():
-        #     sleep(1)
         trainerSignal_event.wait()
         trainer_signal = trainerSignal_queue.get()
         # Check if it is time for testing (starts at 0%)
@@ -969,7 +947,7 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             if __debug__:
                 print("Master received signal: 'RELOAD_COLLECTOR'")
             terminateExperienceCollectors(collectors)
-            collectors = startExperienceCollectors(parameters, expReplayer, loadedModelName, model_in_subfolder,
+            collectors = startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder,
                                                    loadModel, path)
         # Check if 1% of training time has elapsed
         if trainer_signal == "PRINT_TRAIN_PROGRESS":
