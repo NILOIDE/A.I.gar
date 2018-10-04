@@ -702,8 +702,11 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
 
 
 def performModelSteps(parameters, experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
-    p = psutil.Process()
-    p.nice(20)
+    # p = psutil.Process()
+    # p.nice(20)
+    num_cores = mp.cpu_count()
+    if num_cores > 1:
+        os.sched_setaffinity(0, range(1, num_cores)) # Core #1 is reserved for trainer process
     # Create game instance
     model = Model(False, False, parameters)
     createModelPlayers(parameters, model, modelPath)
@@ -802,6 +805,9 @@ def train(parameters, expReplayer, learningAlg, step):
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
 def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     # Increase priority of this process
+    num_cores = mp.cpu_count()
+    if num_cores > 1:
+        os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
     learningAlg = createLearner(parameters, path)
@@ -818,7 +824,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     collectionTime = time.time()
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
         addExperiencesToBuffer(expReplayer, experience_queue.get())
-        print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.MEMORY_CAPACITY))
+        print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
     # TODO: Start with buffer completely full?
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     print("Initial experience collection completed.")
@@ -925,8 +931,11 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     trainer = Process(target=trainOnExperiences,
                       args=(parameters, experience_queue, path, trainerSignal_queue, trainerSignal_event))
     trainer.start()
-    p = psutil.Process()
-    p.nice(15)
+    # p = psutil.Process()
+    # p.nice(15)
+    num_cores = mp.cpu_count()
+    if num_cores > 1:
+        os.sched_setaffinity(0, range(1,num_cores))  # Core #0 is reserved for trainer process
     while True:
         trainerSignal_event.wait()
         trainer_signal = trainerSignal_queue.get()
