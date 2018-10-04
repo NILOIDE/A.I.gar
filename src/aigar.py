@@ -17,9 +17,8 @@ from model.expReplay import ExpReplay
 from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
-import pathos.multiprocessing as mp
-from multiprocessing import Process, Queue, Manager, active_children, Event
-from multiprocessing.managers import BaseManager, NamespaceProxy
+import multiprocessing as mp
+from multiprocessing import Process, Queue, Manager, Event
 from time import sleep
 
 from view.view import View
@@ -489,11 +488,12 @@ def exportTestResults(testResults, path, parameters, testInterval):
 
 
 # Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
-def performTest(path, testParams, testSteps):
+def performTest(path, specialParams):
+    testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, path)
     testModel.initialize(False)
-    for step in range(testSteps):
+    for step in range(testParams.RESET_LIMIT):
         testModel.update()
 
     bots = testModel.getBots()
@@ -509,29 +509,21 @@ def performTest(path, testParams, testSteps):
 
 # Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
 # The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
-def testModel(path, name, plotName, testParams, n_tests, currentTest):
+def testModel(path, testType, plotName, specialParams, n_tests, testName):
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-    print("Testing", name, "...\n")
+    print("Testing", testType, "...\n")
 
     start = time.time()
-    testSteps = testParams.RESET_LIMIT
-    # TODO: Parallel testing used to take as long as serial. Test this.
-    # Serial Testing
-    # testResults = []
-    # for i in range(n_tests):
-    #     testResults.append(performTest(path, testParams, testSteps))
-
     # Parallel testing
-
-    #TODO test wether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
+    #TODO test whether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
     pool = mp.Pool(n_tests)
     print("Initializing " + str(n_tests) + " testers..." )
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-    testResults = pool.starmap(performTest, [(path, testParams, testSteps) for process in range(n_tests)])
+    testResults = pool.starmap(performTest, [(path, specialParams) for process in range(n_tests)])
     pool.close()
     pool.join()
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-    print(str(currentTest*testParams.TRAIN_PERCENT_TEST_INTERVAL) + "% test's " + name + " runs finished.\n" )
+    print(testName + " test's " + testType + " runs finished.\n")
     for result in testResults:
         print("Process id #" + str(result[3]) + "'s test run:" +
               "\n   Number of bot mass lists: " + str(len(result[0])) +
@@ -549,7 +541,7 @@ def testModel(path, name, plotName, testParams, n_tests, currentTest):
         masses.extend(testResults[test][0])
         meanMasses.append(testResults[test][1])
         maxMasses.append(testResults[test][2])
-    evals = {"name":name}
+    evals = {"name":testType}
     evals["plotName"] = plotName
     evals["meanScore"] = numpy.mean(meanMasses)
     evals["stdMean"] = numpy.std(meanMasses)
@@ -560,7 +552,7 @@ def testModel(path, name, plotName, testParams, n_tests, currentTest):
     return evals, masses
 
 
-def testingProcedure(path, parameters, packageName, currentTest, n_tests, testResults=None, tester_queue=None):
+def testingProcedure(path, parameters, packageName, testName, n_tests, testResults=None, tester_queue=None):
     # currentAlg = model.getNNBot().getLearningAlg()
     # originalNoise = currentAlg.getNoise()
     # currentAlg.setNoise(0)
@@ -572,24 +564,24 @@ def testingProcedure(path, parameters, packageName, currentTest, n_tests, testRe
     # TODO: Perform all test kinds simultaneously
     testEvals = {}
     masses = {}
-    testParams = createTestParams(packageName)
-    testEvals["current"], masses["current"] = testModel(path, "test", "Test", testParams, n_tests, currentTest)
+    testParams = [packageName]
+    testEvals["current"], masses["current"] = testModel(path, "test", "Test", testParams, n_tests, testName)
 
-    pelletTestParams = createTestParams(packageName, False)
+    pelletTestParams = [packageName, False]
     testEvals["pellet"], masses["pellet"] = testModel(path, "pellet", "Pellet_Collection", pelletTestParams,
-                                                      n_tests, currentTest)
+                                                      n_tests, testName)
     if parameters.MULTIPLE_BOTS_PRESENT:
-        greedyTestParams = createTestParams(packageName, False, 1, 1)
+        greedyTestParams = (packageName, False, 1, 1)
         testEvals["vsGreedy"], masses["vsGreedy"] = testModel(path, "vsGreedy", "Vs_Greedy", greedyTestParams,
-                                                              n_tests, currentTest)
+                                                              n_tests, testName)
     if parameters.VIRUS_SPAWN:
-        virusTestParams = createTestParams(packageName, True)
+        virusTestParams = (packageName, True)
         testEvals["virus"], masses["virus"] = testModel(path, "pellet_with_virus", "Pellet_Collection_with_Viruses",
-                                                        virusTestParams, n_tests, currentTest)
+                                                        virusTestParams, n_tests, testName)
         if parameters.MULTIPLE_BOTS_PRESENT:
-            virusGreedyTestParams = createTestParams(packageName, True, 1, 1)
+            virusGreedyTestParams = (packageName, True, 1, 1)
             testEvals["virusGreedy"], masses["virusGreedy"] = testModel(path, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
-                                                                        virusGreedyTestParams, n_tests, currentTest)
+                                                                        virusGreedyTestParams, n_tests, testName)
     # TODO: Check if following commented noise code is needed
     # currentAlg.setNoise(originalNoise)
     #
@@ -605,7 +597,7 @@ def testingProcedure(path, parameters, packageName, currentTest, n_tests, testRe
         # Append testEvals dictionary to list manager
         testResults.append(testEvals)
         # Put signal in queue so that Master process knows that this process should be terminated
-        tester_queue.put(currentTest)
+        tester_queue.put(testName)
 
 
 def runFinalTests(path, parameters, packageName):
@@ -718,20 +710,26 @@ def performModelSteps(parameters, experience_queue, processNum, model_in_subfold
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize(loadModel)
+    exp_req_for_put = parameters.COLLECTOR_QUEUE_PUT_EXPS * (parameters.FRAME_SKIP_RATE + 1) + 1
     # Run game until terminated
     while True:
         for step in range(parameters.RESET_LIMIT):
             model.update()
-        all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
-        if __debug__:
-            shape = np.shape(all_experienceLists)
-            print("Collector #" + str(processNum) + " is adding to experience queue " +
-                  str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
-            queueTimer = time.time()
-        for experienceList in all_experienceLists:
-            experience_queue.put(experienceList)
-        if __debug__:
-            print("Collector #" + str(processNum) + " time taken to push experiences to queue: " + str.format('{0:.3f}', time.time()-queueTimer))
+            # After a bot has 'n' amount of experiences, send them to trainer.
+            # print(len([bot.getExperiences() for bot in model.getBots()][0]))
+            if (step + 1) %  exp_req_for_put == 0:
+                all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
+                if __debug__:
+                    shape = np.shape(all_experienceLists)
+                    print("Collector #" + str(processNum) + " is adding to experience queue " +
+                          str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
+                    queueTimer = time.time()
+                for experienceList in all_experienceLists:
+                    experience_queue.put(experienceList)
+                if __debug__:
+                    print("Collector #" + str(processNum) + " time taken to push experiences to queue: " + str.format('{0:.3f}', time.time()-queueTimer))
+                model.resetBots()
+
         model.resetModel()
 
 
@@ -874,7 +872,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
             queue.put("RELOAD_COLLECTOR")
             signal_event.set()
         # Get collector experiences from Queue and add them to buffer
-        if not experience_queue.empty():
+        while not experience_queue.empty():
             queueTimer = time.time()
             addExperiencesToBuffer(expReplayer, experience_queue.get())
             if __debug__:
@@ -935,9 +933,10 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
         if trainer_signal == "TEST":
             if __debug__:
                 print("Master received signal: 'TEST'")
+            testName = str(testsPerformed*parameters.TRAIN_PERCENT_TEST_INTERVAL) + "%"
             # Start tester_process in order for testing to happen in parallel. Tester automatically appends testResults
             # to testResults list manager within process and notifies Master process of being done through the tester queue.
-            tester = Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
+            tester = Process(target=testingProcedure, args=(path, parameters, packageName, testName,
                                                             parameters.DUR_TRAIN_TEST_NUM, testResults, testerSignal_queue))
             tester.start()
             testerDict[testsPerformed] = tester
@@ -964,7 +963,7 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
 
         if __debug__:
             print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
-            children = active_children()
+            children = mp.active_children()
             print("Number of alive child processes:    " + str(len(children)))
             for p in children:
                 print(p)
@@ -1138,7 +1137,8 @@ def run():
         modelPath = finalPathName(parameters, modelPath)
         print("--------")
         print("Total time elapsed:               " + elapsedTimeText(startTime))
-        print("Total average time per update:    " + str((time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + "seconds")
+        print("Total average time per update:    " +
+              str.format('{0:.3f}', (time.time()-startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
         print("--------")
         if model_in_subfolder:
             print(os.path.join(modelPath))

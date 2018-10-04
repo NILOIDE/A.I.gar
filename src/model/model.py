@@ -105,7 +105,7 @@ class Model(object):
 
     def resetModel(self):
         self.field.reset()
-        self.resetBots()
+        # self.resetBots()
         self.counter = 0
 
     def update(self):

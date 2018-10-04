@@ -496,7 +496,17 @@ class Network(object):
         if not os.path.exists(path + "models/"):
             os.mkdir(path + "models/")
         self.targetNetwork.set_weights(self.valueNetwork.get_weights())
-        self.targetNetwork.save(path + "models/" + name + "model.h5")
+        complete = False
+        # TODO: Apply Lock so that this 'try' is not necessary (sometimes this exception catches an error)
+        while not complete:
+            try:
+                self.targetNetwork.save(path + "models/" + name + "model.h5")
+                complete = True
+            except Exception:
+                print("Error saving network. ########################")
+                complete = False
+                print("Trying to save again...")
+        print("Network saved successfully.")
 
     def setEpsilon(self, val):
         self.epsilon = val
