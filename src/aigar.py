@@ -780,7 +780,7 @@ def createLearner(parameters, path):
 
 def addExperiencesToBuffer(expReplayer, experienceList):
     if __debug__:
-        print("Trainer is adding " + str(len(experienceList)) + " experiences to experience buffer...")
+        print("Trainer is adding " + str(len(experienceList)) + " experiences to buffer...")
     for experience in experienceList:
         # TODO: Make add method nicer by taking entire memory as argument?
         expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
@@ -818,6 +818,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     collectionTime = time.time()
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
         addExperiencesToBuffer(expReplayer, experience_queue.get())
+        print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.MEMORY_CAPACITY))
     # TODO: Start with buffer completely full?
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
     print("Initial experience collection completed.")
