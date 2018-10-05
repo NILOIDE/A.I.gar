@@ -90,7 +90,8 @@ class Model(object):
         self.resetLimit = reset_time
 
     def initialize(self, modelHasBeenLoaded):
-        print("Initializing model...")
+        if __debug__:
+            print("Initializing model...")
         # if self.trainingEnabled:
         #     self.bots[0].saveInitialModels(self.path)
         #     if not modelHasBeenLoaded:

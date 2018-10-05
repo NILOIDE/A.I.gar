@@ -1,5 +1,5 @@
 import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
 import sys
 import importlib
 import importlib.util
@@ -397,7 +397,6 @@ def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, 
     del SPEC_OS
 
     # Change parameters in testParameters module
-    # TODO: Change test's RESET_LIMIT to 0? (Would get rid of resetting at the end of episode)
     testParameters.GATHER_EXP = False
     if virus != None:
         testParameters.VIRUS_SPAWN = virus
@@ -489,6 +488,9 @@ def exportTestResults(testResults, path, parameters, testInterval):
 
 # Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
 def performTest(path, specialParams):
+    num_cores = mp.cpu_count()
+    if num_cores > 1:
+        os.sched_setaffinity(0, range(1, num_cores-1)) # Core #1 is reserved for trainer process
     testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, path)
@@ -515,7 +517,6 @@ def testModel(path, testType, plotName, specialParams, n_tests, testName):
 
     start = time.time()
     # Parallel testing
-    #TODO test whether we actually NEED pathos.multiprocessing or if we can do just with OG multiprocessing
     pool = mp.Pool(n_tests)
     print("Initializing " + str(n_tests) + " testers..." )
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
@@ -702,8 +703,6 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
 
 
 def performModelSteps(parameters, experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
-    # p = psutil.Process()
-    # p.nice(20)
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, range(1, num_cores)) # Core #1 is reserved for trainer process
@@ -726,11 +725,8 @@ def performModelSteps(parameters, experience_queue, processNum, model_in_subfold
                     shape = np.shape(all_experienceLists)
                     print("Collector #" + str(processNum) + " is adding to experience queue " +
                           str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
-                    queueTimer = time.time()
                 for experienceList in all_experienceLists:
                     experience_queue.put(experienceList)
-                if __debug__:
-                    print("Collector #" + str(processNum) + " time taken to push experiences to queue: " + str.format('{0:.3f}', time.time()-queueTimer))
                 model.resetBots()
 
         model.resetModel()
@@ -781,14 +777,6 @@ def createLearner(parameters, path):
     return learningAlg
 
 
-def addExperiencesToBuffer(expReplayer, experienceList):
-    if __debug__:
-        print("Trainer is adding " + str(len(experienceList)) + " experiences to buffer...")
-    for experience in experienceList:
-        # TODO: Make add method nicer by taking entire memory as argument?
-        expReplayer.add(experience[0], experience[1], experience[2], experience[3], experience[4])
-
-
 def train(parameters, expReplayer, learningAlg, step):
     # TODO: Use GPU
     batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
@@ -823,7 +811,8 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     print("Beginning initial experience collection...\n")
     collectionTime = time.time()
     while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
-        addExperiencesToBuffer(expReplayer, experience_queue.get())
+        for experience in experience_queue.get():
+            expReplayer.add(*experience)
         print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
     # TODO: Start with buffer completely full?
     # TODO: can experiences be added in batch in Prioritized Replay Buffer?
@@ -839,7 +828,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     network_copySteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     timeStep = time.time()
-    printSteps = 10
+    printSteps = 50
     for step in range(parameters.MAX_TRAINING_STEPS):
         if step != 0 and step % printSteps == 0:
             print("__________________________________________________________")
@@ -852,7 +841,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
                 targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
                 print("Steps before target network update:       " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) )
             print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', time.time() - timeStep) + "s")
-            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨\n")
+            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
         # Check if testing should happen
         if parameters.ENABLE_TESTING and step % testInterval == 0:
@@ -881,7 +870,8 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
         # Get collector experiences from Queue and add them to buffer
         while not experience_queue.empty():
             queueTimer = time.time()
-            addExperiencesToBuffer(expReplayer, experience_queue.get())
+            for experience in experience_queue.get():
+                expReplayer.add(*experience)
             if __debug__:
                 print("Trainer time taken to get experiences and add them to expReplay: " + str.format('{0:.3f}', time.time()-queueTimer))
         # Train 1 step
@@ -892,7 +882,6 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             queue.put("PRINT_TRAIN_PROGRESS")
             signal_event.set()
-        print("----------")
     # Signal that training has finished
     if __debug__:
         print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
@@ -958,6 +947,13 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             terminateExperienceCollectors(collectors)
             collectors = startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder,
                                                    loadModel, path)
+            if __debug__:
+                print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
+                children = mp.active_children()
+                print("Number of alive child processes:    " + str(len(children)))
+                for p in children:
+                    print(p)
+                print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
         # Check if 1% of training time has elapsed
         if trainer_signal == "PRINT_TRAIN_PROGRESS":
             if __debug__:
@@ -970,15 +966,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
             terminateExperienceCollectors(collectors)
             trainer.join(timeout=0.001)
             break
-
-        if __debug__:
-            print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
-            children = mp.active_children()
-            print("Number of alive child processes:    " + str(len(children)))
-            for p in children:
-                print(p)
-            print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
-
         if parameters.ENABLE_TESTING:
             if __debug__:
                 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -1029,6 +1016,7 @@ def run():
         viewEnabled = int(input("Display view?: (1 == yes)\n"))
         viewEnabled = (viewEnabled == 1)
 
+    tweakedTotal = []
     modelName = None
     modelPath = None
     loadedModelName = None
@@ -1085,20 +1073,12 @@ def run():
                 modelName = None
         if packageName is not None:
             parameters = importlib.import_module('.networkParameters', package=packageName)
-            algorithm = algorithmNameToNumber(parameters.ALGORITHM)
 
     if not loadModel:
         packageName = "model"
         parameters = importlib.import_module('.networkParameters', package=packageName)
-
-        # If parameter file has no algorithm, input and write to parameter file
-        if parameters.ALGORITHM == "None":
-            algorithm = int(input("What learning algorithm do you want to use?\n" + \
-                                  "'Q-Learning' == 0, 'Actor-Critic' == 2,\n"))
-            modifyParameterValue([["ALGORITHM", algorithmNumberToName(algorithm), checkValidParameter("ALGORITHM")]], modelPath)
-
+    # TODO: Check if algorithm loads correctly ( both when starting fresh train and when loading pretrained model)
     tweaking = int(input("Do you want to tweak parameters? (1 == yes)\n"))
-    tweakedTotal = []
     if tweaking == 1:
         while True:
             tweakedParameter = str(input("Enter name of parameter to be tweaked:\n"))
