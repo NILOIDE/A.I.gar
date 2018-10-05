@@ -1,6 +1,5 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warnings
-import sys
 import importlib
 import importlib.util
 import shutil
@@ -18,7 +17,7 @@ from model.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 import matplotlib.pyplot as plt
 from builtins import input
 import multiprocessing as mp
-from multiprocessing import Process, Queue, Manager, Event
+from multiprocessing import Process, Queue, Manager
 from time import sleep
 
 from view.view import View
@@ -554,14 +553,7 @@ def testModel(path, testType, plotName, specialParams, n_tests, testName):
 
 
 def testingProcedure(path, parameters, packageName, testName, n_tests, testResults=None, tester_queue=None):
-    # currentAlg = model.getNNBot().getLearningAlg()
-    # originalNoise = currentAlg.getNoise()
-    # currentAlg.setNoise(0)
-    #
-    # originalTemp = None
-    # if str(currentAlg) != "AC":
-    #     originalTemp = currentAlg.getTemperature()
-    #     currentAlg.setTemperature(0)
+    # TODO: Make sure Actor critic noise is set to 0 while testing
     # TODO: Perform all test kinds simultaneously
     testEvals = {}
     masses = {}
@@ -583,11 +575,6 @@ def testingProcedure(path, parameters, packageName, testName, n_tests, testResul
             virusGreedyTestParams = (packageName, True, 1, 1)
             testEvals["virusGreedy"], masses["virusGreedy"] = testModel(path, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
                                                                         virusGreedyTestParams, n_tests, testName)
-    # TODO: Check if following commented noise code is needed
-    # currentAlg.setNoise(originalNoise)
-    #
-    # if str(currentAlg) != "AC":
-    #     currentAlg.setTemperature(originalTemp)
     if __debug__:
         print("Tester process sending data...")
     # This is for the case that this function is called without the need for parallelism (i.e. Final tests)
@@ -791,7 +778,7 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
+def trainOnExperiences(parameters, experience_queue, path, queue):
     # Increase priority of this process
     num_cores = mp.cpu_count()
     if num_cores > 1:
@@ -828,7 +815,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
     network_copySteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     timeStep = time.time()
-    printSteps = 50
+    printSteps = 10
     for step in range(parameters.MAX_TRAINING_STEPS):
         if step != 0 and step % printSteps == 0:
             print("__________________________________________________________")
@@ -848,7 +835,6 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
             if __debug__:
                 print("Trainer sending signal: 'TEST'")
             queue.put("TEST")
-            signal_event.set()
         # Check if copy of network weights should be saved
         if step % network_saveSteps == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
@@ -866,7 +852,6 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
             if __debug__:
                 print("Trainer sending signal: 'RELOAD_COLLECTOR'")
             queue.put("RELOAD_COLLECTOR")
-            signal_event.set()
         # Get collector experiences from Queue and add them to buffer
         while not experience_queue.empty():
             queueTimer = time.time()
@@ -881,12 +866,10 @@ def trainOnExperiences(parameters, experience_queue, path, queue, signal_event):
             if __debug__:
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             queue.put("PRINT_TRAIN_PROGRESS")
-            signal_event.set()
     # Signal that training has finished
     if __debug__:
         print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
     queue.put("DONE")
-    signal_event.set()
     learningAlg.save(path, str(parameters.MAX_TRAINING_STEPS) + "_")
 
 
@@ -916,17 +899,13 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
     # Create training process and communication pipe
     trainerSignal_queue = Queue()
     # TODO: Create multiple learners
-    trainerSignal_event = Event()
     trainer = Process(target=trainOnExperiences,
-                      args=(parameters, experience_queue, path, trainerSignal_queue, trainerSignal_event))
+                      args=(parameters, experience_queue, path, trainerSignal_queue))
     trainer.start()
-    # p = psutil.Process()
-    # p.nice(15)
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, range(1,num_cores))  # Core #0 is reserved for trainer process
     while True:
-        trainerSignal_event.wait()
         trainer_signal = trainerSignal_queue.get()
         # Check if it is time for testing (starts at 0%)
         if trainer_signal == "TEST":
