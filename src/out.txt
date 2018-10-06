@@ -2,18 +2,787 @@ Enable GUI?: (1 == yes)
 Do you want to load a model? (1 == yes)
 Do you want to tweak parameters? (1 == yes)
 Give saveModel folder a custom name? (1 == yes)
-Path:  savedModels/$Sep-30_20:11$/
-Created new path: savedModels/$Sep-30_20:11$/
+Path:  savedModels/$Oct-05_18:37$/
+Created new path: savedModels/$Oct-05_18:37$/
 
 Initializing network...
 
+Network saved successfully.
+*********************************************************************
+Initializing collectors...
+Collectors initialized.
+Initialization time elapsed:   0.006s
+*********************************************************************
+Master received signal: 'TEST'
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Testing test ...
+
+Master received signal: 'PRINT_TRAIN_PROGRESS'
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Trained:                           1%
+Time elapsed:                      0h : 1m : 29s
+Estimated total duration time:     2h : 28m : 54.62514877319336s
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Master received signal: 'RELOAD_COLLECTOR'
+*********************************************************************
+Terminating collectors...
+Collectors terminated.
+Termination time elapsed:   0.002s
+*********************************************************************
+*********************************************************************
+Initializing collectors...
 
 ******************************************************************
 Beginning initial experience collection...
 
-***********************************************************
+Buffer size: 303 | 3750
+Buffer size: 606 | 3750
+Buffer size: 909 | 3750
+Buffer size: 1212 | 3750
+Buffer size: 1515 | 3750
+Buffer size: 1818 | 3750
+Buffer size: 2121 | 3750
+Buffer size: 2424 | 3750
+Buffer size: 2727 | 3750
+Buffer size: 3030 | 3750
+Buffer size: 3635 | 3750
+Buffer size: 4240 | 3750
+Initial experience collection completed.
+Current replay buffer size:    4240
+Collection time elapsed:      27.818
+
+Beggining to train...
+////////////////////////////////////////////////////////////////////
+
+Trainer sending signal: 'TEST'
+Saving network...
+Network saved successfully.
+Copying network to new file...
+Network saved successfully.
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    900 | Total: 1000
+Steps before next test:                   4900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          99900 | Total: 100000
+Time elapsed during last 100 train steps:  7.772s   (0.078s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   4800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          99800 | Total: 100000
+Time elapsed during last 100 train steps:  6.229s   (0.062s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    700 | Total: 1000
+Steps before next test:                   4700 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          99700 | Total: 100000
+Time elapsed during last 100 train steps:  6.314s   (0.063s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    600 | Total: 1000
+Steps before next test:                   4600 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          99600 | Total: 100000
+Time elapsed during last 100 train steps:  5.683s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    500 | Total: 1000
+Steps before next test:                   4500 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          99500 | Total: 100000
+Time elapsed during last 100 train steps:  5.675s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4240 | Total: 75000
+Steps before collector network update:    400 | Total: 1000
+Steps before next test:                   4400 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          99400 | Total: 100000
+Time elapsed during last 100 train steps:  5.669s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer time taken to get experiences and add them to expReplay: 0.012
+____________________________________________________________________
+Current replay buffer size:              4543 | Total: 75000
+Steps before collector network update:    300 | Total: 1000
+Steps before next test:                   4300 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          99300 | Total: 100000
+Time elapsed during last 100 train steps:  5.688s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer time taken to get experiences and add them to expReplay: 0.012
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    200 | Total: 1000
+Steps before next test:                   4200 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          99200 | Total: 100000
+Time elapsed during last 100 train steps:  5.700s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    100 | Total: 1000
+Steps before next test:                   4100 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          99100 | Total: 100000
+Time elapsed during last 100 train steps:  5.691s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    1000 | Total: 1000
+Steps before next test:                   4000 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          99000 | Total: 100000
+Time elapsed during last 100 train steps:  5.701s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer sending signal: 'PRINT_TRAIN_PROGRESS'
+Trainer sending signal: 'RELOAD_COLLECTOR'
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    900 | Total: 1000
+Steps before next test:                   3900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          98900 | Total: 100000
+Time elapsed during last 100 train steps:  5.875s   (0.059s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   3800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          98800 | Total: 100000
+Time elapsed during last 100 train steps:  5.779s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    700 | Total: 1000
+Steps before next test:                   3700 | Total: 5000Collectors initialized.
+Initialization time elapsed:   0.007s
+*********************************************************************
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Number of alive child processes:    7
+<Process(Process-6, started)>
+<Process(Process-8, started)>
+<Process(Process-7, started)>
+<Process(Process-3, started)>
+<ForkProcess(SyncManager-2, started)>
+<Process(Process-5, started)>
+<Process(Process-4, started)>
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Master received signal: 'PRINT_TRAIN_PROGRESS'
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Trained:                           2%
+Time elapsed:                      0h : 2m : 26s
+Estimated total duration time:     2h : 2m : 27.266578674316406s
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Master received signal: 'RELOAD_COLLECTOR'
+*********************************************************************
+Terminating collectors...
+Collectors terminated.
+Termination time elapsed:   0.002s
+*********************************************************************
+*********************************************************************
+Initializing collectors...
+
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          98700 | Total: 100000
+Time elapsed during last 100 train steps:  5.830s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    600 | Total: 1000
+Steps before next test:                   3600 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          98600 | Total: 100000
+Time elapsed during last 100 train steps:  5.764s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    500 | Total: 1000
+Steps before next test:                   3500 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          98500 | Total: 100000
+Time elapsed during last 100 train steps:  5.725s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    400 | Total: 1000
+Steps before next test:                   3400 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          98400 | Total: 100000
+Time elapsed during last 100 train steps:  5.728s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    300 | Total: 1000
+Steps before next test:                   3300 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          98300 | Total: 100000
+Time elapsed during last 100 train steps:  5.722s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    200 | Total: 1000
+Steps before next test:                   3200 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          98200 | Total: 100000
+Time elapsed during last 100 train steps:  5.726s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    100 | Total: 1000
+Steps before next test:                   3100 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          98100 | Total: 100000
+Time elapsed during last 100 train steps:  5.726s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    1000 | Total: 1000
+Steps before next test:                   3000 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          98000 | Total: 100000
+Time elapsed during last 100 train steps:  5.725s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer sending signal: 'PRINT_TRAIN_PROGRESS'
+Trainer sending signal: 'RELOAD_COLLECTOR'
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    900 | Total: 1000
+Steps before next test:                   2900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          97900 | Total: 100000
+Time elapsed during last 100 train steps:  5.868s   (0.059s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   2800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          97800 | Total: 100000
+Time elapsed during last 100 train steps:  5.783s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    700 | Total: 1000
+Steps before next test:                   2700 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          97700 | Total: 100000
+Time elapsed during last 100 train steps:  5.840s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    600 | Total: 1000
+Steps before next test:                   2600 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          97600 | Total: 100000
+Time elapsed during last 100 train steps:  5.746s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    500 | Total: 1000
+Steps before next test:                   2500 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          97500 | Total: 100000
+Time elapsed during last 100 train steps:  5.709s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    400 | Total: 1000
+Steps before next test:                   2400 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          97400 | Total: 100000
+Time elapsed during last 100 train steps:  5.721s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    300 | Total: 1000
+Steps before next test:                   2300 | Total: 5000Collectors initialized.
+Initialization time elapsed:   0.010s
+*********************************************************************
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Number of alive child processes:    6
+<Process(Process-9, started)>
+<Process(Process-6, started)>
+<Process(Process-8, started)>
+<Process(Process-10, started)>
+<ForkProcess(SyncManager-2, started)>
+<Process(Process-5, started)>
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Master received signal: 'PRINT_TRAIN_PROGRESS'
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Trained:                           3%
+Time elapsed:                      0h : 3m : 24s
+Estimated total duration time:     1h : 53m : 35.02925554911235s
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Master received signal: 'RELOAD_COLLECTOR'
+*********************************************************************
+Terminating collectors...
+Collectors terminated.
+Termination time elapsed:   0.002s
+*********************************************************************
+*********************************************************************
 Initializing collectors...
 Collectors initialized.
-Initialization time elapsed:   0.002s
-***********************************************************
+Initialization time elapsed:   0.008s
+*********************************************************************
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Number of alive child processes:    7
+<Process(Process-9, started)>
+<Process(Process-12, started)>
+<Process(Process-6, started)>
+<Process(Process-10, started)>
+<ForkProcess(SyncManager-2, started)>
+<Process(Process-5, started)>
+<Process(Process-11, started)>
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Master received signal: 'PRINT_TRAIN_PROGRESS'
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Trained:                           4%
+Time elapsed:                      0h : 4m : 21s
+Estimated total duration time:     1h : 49m : 4.13989782333374s
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Master received signal: 'RELOAD_COLLECTOR'
+*********************************************************************
+Terminating collectors...
+Collectors terminated.
+Termination time elapsed:   0.002s
+*********************************************************************
+*********************************************************************
+Initializing collectors...
+
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          97300 | Total: 100000
+Time elapsed during last 100 train steps:  5.716s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    200 | Total: 1000
+Steps before next test:                   2200 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          97200 | Total: 100000
+Time elapsed during last 100 train steps:  5.709s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    100 | Total: 1000
+Steps before next test:                   2100 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          97100 | Total: 100000
+Time elapsed during last 100 train steps:  5.708s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    1000 | Total: 1000
+Steps before next test:                   2000 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          97000 | Total: 100000
+Time elapsed during last 100 train steps:  5.706s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer sending signal: 'PRINT_TRAIN_PROGRESS'
+Trainer sending signal: 'RELOAD_COLLECTOR'
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    900 | Total: 1000
+Steps before next test:                   1900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          96900 | Total: 100000
+Time elapsed during last 100 train steps:  5.859s   (0.059s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   1800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          96800 | Total: 100000
+Time elapsed during last 100 train steps:  5.776s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    700 | Total: 1000
+Steps before next test:                   1700 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          96700 | Total: 100000
+Time elapsed during last 100 train steps:  5.833s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    600 | Total: 1000
+Steps before next test:                   1600 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          96600 | Total: 100000
+Time elapsed during last 100 train steps:  5.715s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    500 | Total: 1000
+Steps before next test:                   1500 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          96500 | Total: 100000
+Time elapsed during last 100 train steps:  5.685s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    400 | Total: 1000
+Steps before next test:                   1400 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          96400 | Total: 100000
+Time elapsed during last 100 train steps:  5.701s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    300 | Total: 1000
+Steps before next test:                   1300 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          96300 | Total: 100000
+Time elapsed during last 100 train steps:  5.694s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    200 | Total: 1000
+Steps before next test:                   1200 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          96200 | Total: 100000
+Time elapsed during last 100 train steps:  5.680s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    100 | Total: 1000
+Steps before next test:                   1100 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          96100 | Total: 100000
+Time elapsed during last 100 train steps:  5.688s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    1000 | Total: 1000
+Steps before next test:                   1000 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          96000 | Total: 100000
+Time elapsed during last 100 train steps:  5.685s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer sending signal: 'PRINT_TRAIN_PROGRESS'
+Trainer sending signal: 'RELOAD_COLLECTOR'
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    900 | Total: 1000Initializing model...
 Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing 10 testers...
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+0% test's test runs finished.
+
+Process id #12811's test run:
+   Number of bot mass lists: 1
+   Mean mass: 78.19662943290474
+   Max mass: 118.00633445131318
+
+Process id #12813's test run:
+   Number of bot mass lists: 1
+   Mean mass: 78.75512079701312
+   Max mass: 109.52122321636773
+
+Process id #12817's test run:
+   Number of bot mass lists: 1
+   Mean mass: 80.45851929305938
+   Max mass: 123.03985368047498
+
+Process id #12819's test run:
+   Number of bot mass lists: 1
+   Mean mass: 58.897232001796596
+   Max mass: 79.36105832192476
+
+Process id #12821's test run:
+   Number of bot mass lists: 1
+   Mean mass: 81.49758564682737
+   Max mass: 132.04192399822722
+
+Process id #12824's test run:
+   Number of bot mass lists: 1
+   Mean mass: 87.197432299869
+   Max mass: 120.13848178272185
+
+Process id #12826's test run:
+   Number of bot mass lists: 1
+   Mean mass: 81.69994449907595
+   Max mass: 131.60812947690184
+
+Process id #12828's test run:
+   Number of bot mass lists: 1
+   Mean mass: 81.20898130183048
+   Max mass: 140.41411065825454
+
+Process id #12830's test run:
+   Number of bot mass lists: 1
+   Mean mass: 84.47772567478619
+   Max mass: 133.5057882606001
+
+Process id #12833's test run:
+   Number of bot mass lists: 1
+   Mean mass: 78.07278673587032
+   Max mass: 113.71796011107031
+
+Number of tests:   10
+Time elapsed:      284.778s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Testing pellet ...
+
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing model...
+Initializing 10 testers...
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+0% test's pellet runs finished.
+
+Process id #13641's test run:
+   Number of bot mass lists: 1
+   Mean mass: 78.20228493848326
+   Max mass: 127.19360426951044
+
+Process id #13643's test run:
+   Number of bot mass lists: 1
+   Mean mass: 81.8815586385495
+   Max mass: 117.49909760114355
+
+Process id #13645's test run:
+   Number of bot mass lists: 1
+   Mean mass: 80.98689663490254
+   Max mass: 136.23936584195943
+
+Process id #13647's test run:
+   Number of bot mass lists: 1
+   Mean mass: 71.77113009512522
+   Max mass: 119.73585920612035
+
+Process id #13649's test run:
+   Number of bot mass lists: 1
+   Mean mass: 75.71748259164724
+   Max mass: 124.00278802913553
+
+Process id #13651's test run:
+   Number of bot mass lists: 1
+   Mean mass: 76.83756844998203
+   Max mass: 115.98131307669847
+
+Process id #13653's test run:
+   Number of bot mass lists: 1
+   Mean mass: 73.21137359969275
+   Max mass: 102.69160246155046
+
+Process id #13655's test run:
+   Number of bot mass lists: 1
+   Mean mass: 73.45453940060155
+   Max mass: 110.45260520234324
+
+Process id #13656's test run:
+   Number of bot mass lists: 1
+   Mean mass: 73.34063335817439
+   Max mass: 121.95337525822072
+
+Process id #13659's test run:
+   Number of bot mass lists: 1
+   Mean mass: 80.33332729358288
+   Max mass: 113.0900396061585
+
+Number of tests:   10
+Time elapsed:      132.489s
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tester process sending data...
+Collectors initialized.
+Initialization time elapsed:   0.006s
+*********************************************************************
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Number of alive child processes:    7
+<Process(Process-12, started)>
+<Process(Process-6, started)>
+<Process(Process-14, started)>
+<Process(Process-13, started)>
+<ForkProcess(SyncManager-2, started)>
+<Process(Process-5, started)>
+<Process(Process-11, started)>
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Master received signal: 'PRINT_TRAIN_PROGRESS'
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Trained:                           5%
+Time elapsed:                      0h : 5m : 19s
+Estimated total duration time:     1h : 46m : 38.47257614135742s
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+Master received signal: 'TEST'
+Master waiting for previous tester to finish...     <------- WAIT
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Tester #1 (0%) was joined by Master.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Tester done. Resuming progress.
+
+Master received signal: 'RELOAD_COLLECTOR'
+*********************************************************************
+Terminating collectors...
+Collectors terminated.
+Termination time elapsed:   0.003s
+*********************************************************************
+*********************************************************************
+Initializing collectors...
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Testing test ...
+
+Collectors initialized.
+Initialization time elapsed:   0.011s
+*********************************************************************
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+Number of alive child processes:    7
+<Process(Process-15, started)>
+<Process(Process-17, started)>
+<Process(Process-14, started)>
+<Process(Process-13, started)>
+<Process(Process-16, started)>
+<ForkProcess(SyncManager-2, started)>
+<Process(Process-5, started)>
+¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+Steps before next test:                   900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          95900 | Total: 100000
+Time elapsed during last 100 train steps:  5.841s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          95800 | Total: 100000
+Time elapsed during last 100 train steps:  5.766s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    700 | Total: 1000
+Steps before next test:                   700 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          95700 | Total: 100000
+Time elapsed during last 100 train steps:  5.822s   (0.058s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    600 | Total: 1000
+Steps before next test:                   600 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          95600 | Total: 100000
+Time elapsed during last 100 train steps:  5.719s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    500 | Total: 1000
+Steps before next test:                   500 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          95500 | Total: 100000
+Time elapsed during last 100 train steps:  5.699s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    400 | Total: 1000
+Steps before next test:                   400 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          95400 | Total: 100000
+Time elapsed during last 100 train steps:  5.703s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    300 | Total: 1000
+Steps before next test:                   300 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          95300 | Total: 100000
+Time elapsed during last 100 train steps:  5.699s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    200 | Total: 1000
+Steps before next test:                   200 | Total: 5000
+Steps before target network update:       200 | Total: 500
+Steps remaining:                          95200 | Total: 100000
+Time elapsed during last 100 train steps:  5.722s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              4846 | Total: 75000
+Steps before collector network update:    100 | Total: 1000
+Steps before next test:                   100 | Total: 5000
+Steps before target network update:       100 | Total: 500
+Steps remaining:                          95100 | Total: 100000
+Time elapsed during last 100 train steps:  5.720s   (0.057s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer time taken to get experiences and add them to expReplay: 0.012
+Trainer time taken to get experiences and add them to expReplay: 0.012
+____________________________________________________________________
+Current replay buffer size:              5452 | Total: 75000
+Steps before collector network update:    1000 | Total: 1000
+Steps before next test:                   5000 | Total: 5000
+Steps before target network update:       500 | Total: 500
+Steps remaining:                          95000 | Total: 100000
+Time elapsed during last 100 train steps:  6.467s   (0.065s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Trainer sending signal: 'PRINT_TRAIN_PROGRESS'
+Trainer sending signal: 'TEST'
+Trainer receiving wait signal...
+Trainer waiting for previous tester to finish...    <------- WAIT
+Trainer resuming.
+Trainer sending signal: 'RELOAD_COLLECTOR'
+Target Network updated.
+____________________________________________________________________
+Current replay buffer size:              5452 | Total: 75000
+Steps before collector network update:    900 | Total: 1000
+Steps before next test:                   4900 | Total: 5000
+Steps before target network update:       400 | Total: 500
+Steps remaining:                          94900 | Total: 100000
+Time elapsed during last 100 train steps:  134.516s   (1.345s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+____________________________________________________________________
+Current replay buffer size:              5452 | Total: 75000
+Steps before collector network update:    800 | Total: 1000
+Steps before next test:                   4800 | Total: 5000
+Steps before target network update:       300 | Total: 500
+Steps remaining:                          94800 | Total: 100000
+Time elapsed during last 100 train steps:  6.246s   (0.062s/step)
+¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨
+Initializing 10 testers...
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+

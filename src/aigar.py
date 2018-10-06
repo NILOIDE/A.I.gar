@@ -326,8 +326,7 @@ def defineScreenSize(humansNr):
     return SCREEN_WIDTH, SCREEN_HEIGHT
 
 
-def elapsedTimeText(startTime):
-    secondsElapsed = int(time.time()- startTime)
+def elapsedTimeText(secondsElapsed):
     seconds_print = secondsElapsed % 60
     minutesElapsed = int(secondsElapsed / 60)
     minutes_print = minutesElapsed % 60
@@ -336,14 +335,17 @@ def elapsedTimeText(startTime):
 
 
 def printTrainProgress(parameters, currentPart, startTime):
-    print("::::::::::::::::::::::::::::::::::::::::::::::::::::::")
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     currentPart += smallPart
-    percentPrint = currentPart / parameters.MAX_TRAINING_STEPS * 100
-    print("Trained:        " + str(int(percentPrint)) + "%")
-    timePrint = elapsedTimeText(startTime)
-    print("Time elapsed:   " + timePrint)
-    print("::::::::::::::::::::::::::::::::::::::::::::::::::::::")
+    percentPrint = currentPart / parameters.MAX_TRAINING_STEPS
+    timePrint = elapsedTimeText(int(time.time()- startTime))
+    totalTime = (time.time() - startTime) / currentPart * parameters.MAX_TRAINING_STEPS
+    totalTimePrint = elapsedTimeText(int(totalTime))
+    print("::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::\n" +
+          "Trained:                           " + str(int(percentPrint * 100)) + "%\n" +
+          "Time elapsed:                      " + timePrint + "\n" +
+          "Estimated total duration time:     " + totalTimePrint + "\n" +
+          "::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
     return currentPart
 
 def createNetwork(parameters, path):
@@ -493,7 +495,7 @@ def performTest(path, specialParams):
     testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, path)
-    testModel.initialize(False)
+    testModel.initialize()
     for step in range(testParams.RESET_LIMIT):
         testModel.update()
 
@@ -698,16 +700,18 @@ def performModelSteps(parameters, experience_queue, processNum, model_in_subfold
     createModelPlayers(parameters, model, modelPath)
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
-    model.initialize(loadModel)
+    model.initialize()
     exp_req_for_put = parameters.COLLECTOR_QUEUE_PUT_EXPS * (parameters.FRAME_SKIP_RATE + 1) + 1
     # Run game until terminated
     while True:
         for step in range(parameters.RESET_LIMIT):
-            if __debug__:
-                if pauseSignal.value:
+            if pauseSignal.value:
+                if __debug__:
                     print("Collector #" + str(processNum) + " waiting for tester to finish...        <------- WAIT")
-            while pauseSignal.value:
-                sleep(0.01)
+                while pauseSignal.value:
+                    sleep(0.01)
+                if __debug__:
+                    print("Collector #" + str(processNum) + " resuming.")
             model.update()
             # After a bot has 'n' amount of experiences, send them to trainer.
             # print(len([bot.getExperiences() for bot in model.getBots()][0]))
@@ -817,26 +821,28 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
-    network_saveSteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
-    network_copySteps = parameters.NETWORK_SAVE_PERCENT_STEPS / parameters.MAX_TRAINING_STEPS
+    network_saveSteps = parameters.NETWORK_SAVE_PERCENT_STEPS /100 * parameters.MAX_TRAINING_STEPS
+    network_copySteps = parameters.NETWORK_COPY_PERCENT_STEPS /100 * parameters.MAX_TRAINING_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    timeStep = time.time()
-    printSteps = 10
+    printSteps = 100
     for step in range(parameters.MAX_TRAINING_STEPS):
-        if step != 0 and step % printSteps == 0:
-            print("____________________________________________________________________")
-            if __debug__:
-                print("Current replay buffer size:              " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
+        if __debug__:
+            if step != 0 and step % printSteps == 0:
                 coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
-                print("Steps before collector network update:    " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk))
                 test_stepsLeft = testInterval - (step % testInterval)
-                print("Steps before next test:                   " + str(test_stepsLeft) + " | Total: " + str(testInterval))
                 targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
-                print("Steps before target network update:       " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) )
-            elapsedTime = time.time()-timeStep
-            print("Time elapsed during last " + str(printSteps) + " train steps:  " +
-                  str.format('{0:.3f}', elapsedTime) + "s   (" + str.format('{0:.3f}', elapsedTime/printSteps) + "s/step)")
-            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
+                save_stepsLeft = network_saveSteps - (step % network_saveSteps)
+                elapsedTime = time.time() - timeStep
+                print("____________________________________________________________________\n" +
+                      "Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n" +
+                      "Steps before collector network update:      " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk) + "\n" +
+                      "Steps before next test:                     " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
+                      "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
+                      "Steps before saving network:                " + str(save_stepsLeft) + " | Total: " + str(network_saveSteps) + "\n" +
+                      "Total steps remaining:                      " + str(parameters.MAX_TRAINING_STEPS-step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
+                      "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
+                      str.format('{0:.3f}', elapsedTime/printSteps) + "s/step)\n" +
+                      "¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
         # Check if we should print the training progress percentage
         if step != 0 and step % smallPart == 0:
@@ -992,7 +998,8 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
         #     print("Master waiting for previous tester to finish...     <------- WAIT")
         #     m_2_tr_waitPipe.send("WAIT")
         tester.join()
-        tester = mp.Process(target=testingProcedure, args=(path, parameters, packageName, testsPerformed,
+        testName = str(testsPerformed * parameters.TRAIN_PERCENT_TEST_INTERVAL) + "%"
+        tester = mp.Process(target=testingProcedure, args=(path, parameters, packageName, testName,
                                                                 parameters.DUR_TRAIN_TEST_NUM, testResults, te_2_m_donePipe))
         tester.start()
         testsPerformed += 1
@@ -1125,7 +1132,7 @@ def run():
         runFinalTests(modelPath, parameters, packageName)
         modelPath = finalPathName(parameters, modelPath)
         print("--------")
-        print("Total time elapsed:               " + elapsedTimeText(startTime))
+        print("Total time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
         print("Average time per update:    " +
               str.format('{0:.3f}', (time.time()-startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
         print("(This includes possible testing waiting time)")
