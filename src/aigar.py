@@ -21,7 +21,7 @@ from time import sleep
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
-
+import hashlib
 
 import numpy as np
 # import tensorflow as tf
@@ -99,6 +99,14 @@ def initModelFolder(name = None, loadedModelName = None, model_in_subfolder = No
                 path, startTime = createLoadPath(loadedModelName)
     copyParameters(path, loadedModelName)
     return path, startTime
+
+
+def getPackageName(path):
+    packageName = list(path[0:len(path)-1])
+    for idx in range(len(packageName)):
+        if packageName[idx] == "/":
+            packageName[idx] = "."
+    return "".join(packageName)
 
 
 def createPath():
@@ -181,7 +189,7 @@ def createNamedLoadPath(superName, loadedModelName):
     print("Path: ", path)
     return path, startTime
 
-def createNamedPath(self, superName):
+def createNamedPath(superName):
     #Create savedModels folder
     basePath = "savedModels/"
     if not os.path.exists(basePath):
@@ -268,9 +276,8 @@ def checkValidParameter(param):
                 break
             name += char
         if param == name:
-            print("FOUND")
             return n
-    #print("Parameter with name " + tweakedParameter + "not found.")
+    print("Parameter with name " + param + "not found.")
     quit()
 
 
@@ -283,7 +290,6 @@ def modifyParameterValue(tweaked, path):
             text += char
             if char == "=":
                 break
-        print(tweaked[i][0])
         text += " " + str(tweaked[i][1]) + "\n"
         lines[tweaked[i][2]] = text
     out = open(name_of_file, 'w')
@@ -359,7 +365,7 @@ def createHumans(numberOfHumans, model1):
         model1.createHuman(name)
 
 
-def createBots(number, model, botType, parameters, loadPath=None):
+def createBots(number, model, botType, parameters, networkLoadPath=None):
     algorithm = parameters.ALGORITHM
     learningAlg = None
     # loadPath = model.getPath() if loadModel else None
@@ -377,7 +383,7 @@ def createBots(number, model, botType, parameters, loadPath=None):
                 print("Please enter a valid algorithm.\n")
                 quit()
 
-            networks = learningAlg.initializeNetwork(loadPath, networks)
+            networks = learningAlg.initializeNetwork(networkLoadPath, networks)
             model.createBot(botType, learningAlg, parameters)
     elif botType == "Greedy":
         Bot.num_Greedybots = number
@@ -398,6 +404,9 @@ def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, 
 
     # Change parameters in testParameters module
     testParameters.GATHER_EXP = False
+    testParameters.EPSILON = 0
+    # TODO: Temperature has to be set to 0 during testing, right?
+    testParameters.TEMPERATURE = 0
     if virus != None:
         testParameters.VIRUS_SPAWN = virus
     testParameters.NUM_NN_BOTS = num_nn_bots
@@ -464,7 +473,7 @@ def plotTesting(testResults, path, timeBetween, end):
 
 
 # Plot test results and export data
-def exportTestResults(testResults, path, parameters, testInterval):
+def exportTestResults(testResults, path, parameters):
     maxSteps = parameters.MAX_TRAINING_STEPS
     if not os.path.exists(path + "data/"):
         os.mkdir(path + "data/")
@@ -483,18 +492,19 @@ def exportTestResults(testResults, path, parameters, testInterval):
             meanMassesOfGreedyVirusResults = [val["virusGreedy"]["meanScore"] for val in testResults]
             exportResults(meanMassesOfGreedyVirusResults, path + "data/", "VS_1_Greedy_Virus_MassOverTime")
 
+    testInterval =int(maxSteps/100 *parameters.TRAIN_PERCENT_TEST_INTERVAL)
     plotTesting(testResults, path, testInterval, maxSteps)
 
 
 # Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
-def performTest(path, specialParams):
+def performTest(testNetworkPath, specialParams):
     num_cores = mp.cpu_count()
     if num_cores > 1:
         # TODO: Make tests more peregrine-efficient by only using cores which collectors aren't using
-        os.sched_setaffinity(0, range(1, num_cores)) # Core #1 is reserved for trainer process
+        os.sched_setaffinity(0, range(2, num_cores)) # Core #1 is reserved for trainer process
     testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
-    createModelPlayers(testParams, testModel, path)
+    createModelPlayers(testParams, testModel, testNetworkPath)
     testModel.initialize()
     for step in range(testParams.RESET_LIMIT):
         testModel.update()
@@ -506,13 +516,12 @@ def performTest(path, specialParams):
     maxMass = numpy.max([numpy.max(botMass) for botMass in massOverTime])
     varianceMass = numpy.mean(numpy.var(massOverTime))
 
-
     return [massOverTime, meanMass, maxMass, os.getpid()]
 
 
 # Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
 # The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
-def testModel(path, testType, plotName, specialParams, n_tests, testName):
+def testModel(testNetworkPath, testType, plotName, specialParams, n_tests, testName):
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     print("Testing", testType, "...\n")
 
@@ -521,7 +530,7 @@ def testModel(path, testType, plotName, specialParams, n_tests, testName):
     pool = mp.Pool(n_tests)
     print("Initializing " + str(n_tests) + " testers..." )
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-    testResults = pool.starmap(performTest, [(path, specialParams) for process in range(n_tests)])
+    testResults = pool.starmap(performTest, [(testNetworkPath, specialParams) for process in range(n_tests)])
     pool.close()
     pool.join()
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -550,55 +559,44 @@ def testModel(path, testType, plotName, specialParams, n_tests, testName):
     evals["meanMaxScore"] = numpy.mean(maxMasses)
     evals["stdMax"] = numpy.std(maxMasses)
     evals["maxScore"] = numpy.max(maxMasses)
-    # return (name, maxScore, meanScore, stdMean, meanMaxScore, stdMax), masses
     return evals, masses
 
 
-def testingProcedure(path, parameters, packageName, testName, n_tests, testResults=None, donePipe=None):
+def testingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     # TODO: Make sure Actor critic noise is set to 0 while testing
     # TODO: Perform all test kinds simultaneously
     testEvals = {}
     masses = {}
+    packageName = getPackageName(path)
     testParams = [packageName]
-    testEvals["current"], masses["current"] = testModel(path, "test", "Test", testParams, n_tests, testName)
+    testEvals["current"], masses["current"] = testModel(testNetworkPath, "test", "Test", testParams, n_tests, testName)
 
     pelletTestParams = [packageName, False]
-    testEvals["pellet"], masses["pellet"] = testModel(path, "pellet", "Pellet_Collection", pelletTestParams,
+    testEvals["pellet"], masses["pellet"] = testModel(testNetworkPath, "pellet", "Pellet_Collection", pelletTestParams,
                                                       n_tests, testName)
     if parameters.MULTIPLE_BOTS_PRESENT:
         greedyTestParams = (packageName, False, 1, 1)
-        testEvals["vsGreedy"], masses["vsGreedy"] = testModel(path, "vsGreedy", "Vs_Greedy", greedyTestParams,
+        testEvals["vsGreedy"], masses["vsGreedy"] = testModel(testNetworkPath, "vsGreedy", "Vs_Greedy", greedyTestParams,
                                                               n_tests, testName)
     if parameters.VIRUS_SPAWN:
         virusTestParams = (packageName, True)
-        testEvals["virus"], masses["virus"] = testModel(path, "pellet_with_virus", "Pellet_Collection_with_Viruses",
+        testEvals["virus"], masses["virus"] = testModel(testNetworkPath, "pellet_with_virus", "Pellet_Collection_with_Viruses",
                                                         virusTestParams, n_tests, testName)
         if parameters.MULTIPLE_BOTS_PRESENT:
             virusGreedyTestParams = (packageName, True, 1, 1)
-            testEvals["virusGreedy"], masses["virusGreedy"] = testModel(path, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
+            testEvals["virusGreedy"], masses["virusGreedy"] = testModel(testNetworkPath, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
                                                                         virusGreedyTestParams, n_tests, testName)
-    if __debug__:
-        print("Tester process sending data...")
-    # This is for the case that this function is called without the need for parallelism (i.e. Final tests)
-    if testResults is None:
-        return testEvals, masses
-    # Do this if testing procedure is being done in parallel
-    else:
-        # Notify master that testing is done
-        donePipe.send("Done")
-        # Append testEvals dictionary to list manager
-        testResults.append(testEvals)
+    return testEvals, masses
 
 
-def runFinalTests(path, parameters, packageName):
-    print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-    print("Performing final tests...\n")
-    evals, masses = testingProcedure(path, parameters, packageName, "Final", parameters.DUR_TRAIN_TEST_NUM)
+def runFinalTests(path, parameters):
+    testNetworkPath = path + "models/model.h5"
+    evals, masses = testingProcedure(path, testNetworkPath, parameters, "Final", parameters.FINAL_TEST_NUM)
     # TODO: add more test scenarios for multiple greedy bots and full model check
 
     name_of_file = path + "/final_results.txt"
     with open(name_of_file, "w") as file:
-        data = "Number of runs per testing: " + str(parameters.FINAL_TEST_LEN) + "\n"
+        data = "Number of runs per testing: " + str(parameters.FINAL_TEST_NUM) + "\n"
         for testType in evals:
             name = evals[testType]["name"]
             maxScore = str(round(evals[testType]["maxScore"], 1))
@@ -618,15 +616,13 @@ def runFinalTests(path, parameters, packageName):
             val = 0
             for test in masses[testType]:
                 val += test[timeIdx]
-            meanVal = val / parameters.FINAL_TEST_LEN
+            meanVal = val / parameters.FINAL_TEST_NUM
             meanMassPerTimeStep.append(meanVal)
         # exportTestResults(meanMassPerTimeStep, modelPath, "Mean_Mass_" + name)
         labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
                   "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": path,
                   "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
         plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
-    print("\nFinal testing completed.")
-    print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
 
 
 def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
@@ -675,7 +671,7 @@ def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfo
                     testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
 
 
-def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
+def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0):
     numberOfNNBots = parameters.NUM_NN_BOTS
     numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
     numberOfBots = numberOfNNBots + numberOfGreedyBots
@@ -686,36 +682,33 @@ def createModelPlayers(parameters, model, path=None, numberOfHumans=0):
     if numberOfHumans != 0:
         createHumans(numberOfHumans, model)
 
-    createBots(numberOfNNBots, model, "NN", parameters, path)
+    createBots(numberOfNNBots, model, "NN", parameters, networkLoadPath)
     createBots(numberOfGreedyBots, model, "Greedy", parameters)
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
 
-def performModelSteps(parameters, experience_queue, processNum, model_in_subfolder, loadModel, modelPath, pauseSignal):
+def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
+    parameters = importlib.import_module('.networkParameters', package=getPackageName(modelPath))
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, range(1, num_cores)) # Core #1 is reserved for trainer process
     # Create game instance
     model = Model(False, False, parameters)
-    createModelPlayers(parameters, model, modelPath)
+    networkLoadPath = modelPath + "models/model.h5"
+    createModelPlayers(parameters, model, networkLoadPath)
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize()
-    exp_req_for_put = parameters.COLLECTOR_QUEUE_PUT_EXPS * (parameters.FRAME_SKIP_RATE + 1) + 1
+    gameSteps_req_for_exp_push = parameters.COLLECTOR_QUEUE_PUT_EXPS * (parameters.FRAME_SKIP_RATE + 1) + 1
     # Run game until terminated
+    stepCount = 0
     while True:
         for step in range(parameters.RESET_LIMIT):
-            if pauseSignal.value:
-                if __debug__:
-                    print("Collector #" + str(processNum) + " waiting for tester to finish...        <------- WAIT")
-                while pauseSignal.value:
-                    sleep(0.01)
-                if __debug__:
-                    print("Collector #" + str(processNum) + " resuming.")
             model.update()
+            stepCount += 1
             # After a bot has 'n' amount of experiences, send them to trainer.
-            # print(len([bot.getExperiences() for bot in model.getBots()][0]))
-            if (step + 1) %  exp_req_for_put == 0:
+            if stepCount %  gameSteps_req_for_exp_push == 0:
+                # TODO: After episode completes bot will have more exp than pushing batch expects
                 all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
                 if __debug__:
                     shape = np.shape(all_experienceLists)
@@ -723,12 +716,13 @@ def performModelSteps(parameters, experience_queue, processNum, model_in_subfold
                           str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
                 for experienceList in all_experienceLists:
                     experience_queue.put(experienceList)
+                stepCount = 0
                 model.resetBots()
 
         model.resetModel()
 
 
-def startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder, loadModel, path, pauseSignal):
+def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path):
     startTime = time.time()
     print("*********************************************************************")
     print("Initializing collectors...")
@@ -738,8 +732,8 @@ def startExperienceCollectors(parameters, experience_queue, loadedModelName, mod
         quit()
     collectors = []
     for processNum in range(numWorkers):
-        p = mp.Process(target=performModelSteps, args=(parameters, experience_queue, processNum, model_in_subfolder,
-                                                       loadModel, path, pauseSignal))
+        p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder,
+                                                       loadModel, path))
         p.start()
         collectors.append(p)
     print("Collectors initialized.")
@@ -788,14 +782,15 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPipe):
+def trainOnExperiences(parameters, experience_queue, path, queue):
     # Increase priority of this process
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
-    learningAlg = createLearner(parameters, path)
+    networkPath = path + "models/model.h5"
+    learningAlg = createLearner(parameters, networkPath)
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
     else:
@@ -821,8 +816,7 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
-    network_saveSteps = parameters.NETWORK_SAVE_PERCENT_STEPS /100 * parameters.MAX_TRAINING_STEPS
-    network_copySteps = parameters.NETWORK_COPY_PERCENT_STEPS /100 * parameters.MAX_TRAINING_STEPS
+    network_saveSteps = smallPart * parameters.NETWORK_SAVE_PERCENT_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     printSteps = 100
     for step in range(parameters.MAX_TRAINING_STEPS):
@@ -836,12 +830,12 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
                 print("____________________________________________________________________\n" +
                       "Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n" +
                       "Steps before collector network update:      " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk) + "\n" +
-                      "Steps before next test:                     " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
+                      "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
                       "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
                       "Steps before saving network:                " + str(save_stepsLeft) + " | Total: " + str(network_saveSteps) + "\n" +
                       "Total steps remaining:                      " + str(parameters.MAX_TRAINING_STEPS-step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
                       "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
-                      str.format('{0:.3f}', elapsedTime/printSteps) + "s/step)\n" +
+                      str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)\n" +
                       "¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
         # Check if we should print the training progress percentage
@@ -850,20 +844,11 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             queue.put("PRINT_TRAIN_PROGRESS")
         # Check if testing should happen
-        if parameters.ENABLE_TESTING and step % testInterval == 0:
+        if step % testInterval == 0:
             if __debug__:
-                print("Trainer sending signal: 'TEST'")
-            queue.put("TEST")
-            # If a tester is active before a new one is created, wait for
-            if not tr_2_m_waitPipe.poll() and step != 0:
-                if __debug__:
-                    print("Trainer receiving wait signal...")
-                tr_2_m_waitPipe.recv()
-                if __debug__:
-                    print("Trainer waiting for previous tester to finish...    <------- WAIT")
-                tr_2_m_waitPipe.recv()
-                if __debug__:
-                    print("Trainer resuming.")
+                print("Copying network to new file '" + str(step) + "_model.h5 ...")
+            # Save this instance of the network with number of trained steps in the name
+            learningAlg.save(path, str(step) + "_")
         # Check if copy of network weights should be saved
         if step % network_saveSteps == 0:
             # TODO: Update path name to contain number of steps during training (would allow training to resume after being stopped)
@@ -871,11 +856,10 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
                 print("Saving network...")
             # Update model.h5 network file
             learningAlg.save(path)
-            if step % network_copySteps == 0:
-                if __debug__:
-                    print("Copying network to new file...")
-                # Save this instance of the network with number of trained steps in the name
-                learningAlg.save(path, str(step) + "_")
+            # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
+            params = learningAlg.getUpdatedParams()
+            tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
+            modifyParameterValue(tweakedTotal, path)
         # Check if collectors should have their networks reloaded
         if step != 0 and step % coll_stepChunk == 0:
             if __debug__:
@@ -909,66 +893,38 @@ def trainOnExperiences(parameters, experience_queue, path, queue, tr_2_m_waitPip
 # Every a certain amount of training, testing is done. This also happens with the training status being printed.
 def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, path, packageName, startTime):
     # Perform simultaneous experience collection and training
-    # testerActive = False
-    tr_2_m_waitPipe = m_2_tr_waitPipe = None
-    c_waitSignal = False
-    te_2_m_donePipe = m_2_te_donePipe = None
-    if parameters.ENABLE_TESTING:
-        # testerActive = mp.Value('b', False)
-        tr_2_m_waitPipe, m_2_tr_waitPipe = mp.Pipe() # Trainer to master pipe
-        c_waitSignal = mp.Value('b', False) # Collector to master pipe
-        te_2_m_donePipe, m_2_te_donePipe = mp.Pipe() # Tester to master pipe
-        testResults = mp.Manager().list()
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     currentPart = 0
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     testsPerformed = 0
     experience_queue = mp.Queue()
-    collectors = startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder,
-                                           loadModel, path, c_waitSignal)
+    collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder,
+                                           loadModel, path)
     # Create training process and communication pipe
     trainer_master_queue = mp.Queue()
     # TODO: Create multiple learners
     trainer = mp.Process(target=trainOnExperiences,
-                      args=(parameters, experience_queue, path, trainer_master_queue, tr_2_m_waitPipe))
+                      args=(parameters, experience_queue, path, trainer_master_queue))
     trainer.start()
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, range(1,num_cores))  # Core #0 is reserved for trainer process
     while True:
         trainer_signal = trainer_master_queue.get()
-        # Check if it is time for testing (starts at 0%)
-        if trainer_signal == "TEST":
-            if __debug__:
-                print("Master received signal: 'TEST'")
-            if testsPerformed != 0 and not m_2_te_donePipe.poll():
-                print("Master waiting for previous tester to finish...     <------- WAIT")
-                m_2_tr_waitPipe.send("WAIT")
-                c_waitSignal.value = True
-                m_2_te_donePipe.recv() # Master will wait until tester sends Done signal
-                tester.join()
-                if __debug__:
-                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                    print("Tester #" + str(testsPerformed) + " (" + testName + ") was joined by Master.")
-                    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                m_2_tr_waitPipe.send("RESUME")
-                c_waitSignal.value = False
-                print("Tester done. Resuming progress.\n")
-
-            testName = str(testsPerformed*parameters.TRAIN_PERCENT_TEST_INTERVAL) + "%"
-            # Start tester_process in order for testing to happen in parallel. Tester automatically appends testResults
-            # to testResults list manager within process and notifies Master process of being done through the tester queue.
-            tester = mp.Process(target=testingProcedure, args=(path, parameters, packageName, testName,
-                                                            parameters.DUR_TRAIN_TEST_NUM, testResults, te_2_m_donePipe))
-            tester.start()
-            testsPerformed += 1
+            # testName = str(testsPerformed*parameters.TRAIN_PERCENT_TEST_INTERVAL) + "%"
+            # # Start tester_process in order for testing to happen in parallel. Tester automatically appends testResults
+            # # to testResults list manager within process and notifies Master process of being done through the tester queue.
+            # tester = mp.Process(target=testingProcedure, args=(path, parameters, packageName, testName,
+            #                                                 parameters.DUR_TRAIN_TEST_NUM, testResults, te_2_m_donePipe))
+            # tester.start()
+            # testsPerformed += 1
         # Create or re-initialize worker pool every 'n' amount of training steps
         if trainer_signal == "RELOAD_COLLECTOR":
             if __debug__:
                 print("Master received signal: 'RELOAD_COLLECTOR'")
             terminateExperienceCollectors(collectors)
-            collectors = startExperienceCollectors(parameters, experience_queue, loadedModelName, model_in_subfolder,
-                                                   loadModel, path, c_waitSignal)
+            collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder,
+                                                   loadModel, path)
             if __debug__:
                 print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
                 children = mp.active_children()
@@ -992,27 +948,6 @@ def trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel
 
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.\n")
-    # Testing for when training time == 100%
-    if parameters.ENABLE_TESTING:
-        # if not m_2_te_donePipe.poll():
-        #     print("Master waiting for previous tester to finish...     <------- WAIT")
-        #     m_2_tr_waitPipe.send("WAIT")
-        tester.join()
-        testName = str(testsPerformed * parameters.TRAIN_PERCENT_TEST_INTERVAL) + "%"
-        tester = mp.Process(target=testingProcedure, args=(path, parameters, packageName, testName,
-                                                                parameters.DUR_TRAIN_TEST_NUM, testResults, te_2_m_donePipe))
-        tester.start()
-        testsPerformed += 1
-        if __debug__:
-            print("Master awaiting final tester's data...")
-        tester.join()
-        if __debug__:
-            print("Received final tester's data.")
-            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            print("Tester #" + str(testsPerformed) + " (" + testName + ") was joined by Master.")
-            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-        _ = printTrainProgress(parameters, currentPart, startTime)
-        exportTestResults(testResults, path, parameters, testInterval)
 
 
 def run():
@@ -1028,7 +963,6 @@ def run():
     modelPath = None
     loadedModelName = None
     packageName = None
-    parameters = None
     model_in_subfolder = False
     loadModel = int(input("Do you want to load a model? (1 == yes)\n"))
     loadModel = (loadModel == 1)
@@ -1077,13 +1011,8 @@ def run():
                 loadedModelName = modelPath
                 # ModelName = None will autogenereate a name
                 modelName = None
-        if packageName is not None:
-            parameters = importlib.import_module('.networkParameters', package=packageName)
 
-    if not loadModel:
-        packageName = "model"
-        parameters = importlib.import_module('.networkParameters', package=packageName)
-    # TODO: Check if algorithm loads correctly ( both when starting fresh train and when loading pretrained model)
+    # TODO: Check if algorithm loads correctly (both when starting fresh train and when loading pretrained model)
     tweaking = int(input("Do you want to tweak parameters? (1 == yes)\n"))
     if tweaking == 1:
         while True:
@@ -1101,11 +1030,13 @@ def run():
         modelPath = "savedModels/" + str(input("Input folder name:\n"))
 
     modelPath, startTime = initModelFolder(modelPath, loadedModelName, model_in_subfolder)
-
-    print("Created new path: " + modelPath)
+    print("Initialized folder: " + modelPath)
 
     if tweakedTotal:
         modifyParameterValue(tweakedTotal, modelPath)
+    packageName = getPackageName(modelPath)
+    print("Import package name: " + packageName)
+    parameters = importlib.import_module('.networkParameters', package=packageName)
 
     # Initialize network while number of humans is determined
     print("\nInitializing network...\n")
@@ -1125,21 +1056,48 @@ def run():
 
     startTime = time.time()
     if numberOfHumans == 0:
-        trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName, startTime)
+        if parameters.ENABLE_TRAINING:
+            trainingProcedure(parameters, loadedModelName, model_in_subfolder, loadModel, modelPath, packageName, startTime)
     else:
         pass
     if parameters.ENABLE_TRAINING:
-        runFinalTests(modelPath, parameters, packageName)
-        modelPath = finalPathName(parameters, modelPath)
         print("--------")
-        print("Total time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
+        print("Training time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
         print("Average time per update:    " +
-              str.format('{0:.3f}', (time.time()-startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
-        print("(This includes possible testing waiting time)")
+              str.format('{0:.3f}', (time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
+        print("--------")
+        if parameters.ENABLE_TESTING:
+            testStartTime = time.time()
+            # Post train testing
+            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+            print("Performing post-training tests...\n")
+            runFinalTests(modelPath, parameters)
+            print("\nFinal tests completed.\n")
+            # During train testing
+            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+            print("Performing during training tests...")
+            testResults = []
+            smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+            for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
+                testName = str(testPercent) + "%"
+                testStepNumber = testPercent * smallPart
+                testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
+                testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                    parameters.DUR_TRAIN_TEST_NUM)[0])
+            exportTestResults(testResults, modelPath, parameters)
+            print("\nDuring training tests completed.")
+            print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
+            modelPath = finalPathName(parameters, modelPath)
+        print("--------")
+        print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
         print("--------")
         if model_in_subfolder:
             print(os.path.join(modelPath))
             createCombinedModelGraphs(os.path.join(modelPath))
+        print("--------")
+        print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
+        print("--------")
+
 
 if __name__ == '__main__':
     run()

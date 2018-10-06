@@ -201,7 +201,7 @@ class Bot(object):
             self.currentRawAction = extraInfo
 
     # TODO: This function name should be changed
-    def learn_and_move_NN(self):
+    def move_NN(self):
         self.currentlySkipping = False
         if self.currentAction is not None:
             self.updateRewards()
@@ -261,7 +261,7 @@ class Bot(object):
     def makeMove(self):
         self.totalMasses.append(self.player.getTotalMass())
         if self.type == "NN":
-            self.learn_and_move_NN()
+            self.move_NN()
 
         if not self.player.getIsAlive():
             return

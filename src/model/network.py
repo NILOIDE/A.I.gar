@@ -11,6 +11,7 @@ from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, In
 from keras.models import Sequential
 from keras.models import load_model, save_model
 from keras.constraints import maxnorm
+import hashlib
 
 from .parameters import *
 
@@ -148,53 +149,35 @@ class Network(object):
         # CNN
         if self.parameters.CNN_REPR:
             if self.parameters.CNN_P_REPR:
-                if self.parameters.CNN_P_INCEPTION:
-
-                    self.input = Input(shape=(self.stateReprLen, self.stateReprLen, 3))
-
-                    tower_1 = Conv2D(self.kernel_2[2], (1, 1), padding='same', activation='relu')(self.input)
-                    tower_1 = Conv2D(self.kernel_2[2], (3, 3), padding='same', activation='relu')(tower_1)
-
-                    tower_2 = Conv2D(self.kernel_2[2], (1, 1), padding='same', activation='relu')(self.input)
-                    tower_2 = Conv2D(self.kernel_2[2], (5, 5), padding='same', activation='relu')(tower_2)
-
-                    tower_3 = MaxPooling2D((3, 3), strides=(1, 1), padding='same')(self.input)
-                    tower_3 = Conv2D(self.kernel_2[2], (1, 1), padding='same', activation='relu')(tower_3)
-
-                    self.valueNetwork = keras.layers.concatenate([tower_1, tower_2, tower_3], axis=3)
-                    self.valueNetwork = keras.layers.Flatten()(self.valueNetwork)
-
-                # DQN approach
+                # RGB
+                if self.parameters.CNN_P_RGB:
+                    channels = 3
+                # GrayScale
                 else:
-                    # RGB
-                    if self.parameters.CNN_P_RGB:
-                        channels = 3
-                    # GrayScale
-                    else:
-                        channels = 1
-                    if self.parameters.CNN_LAST_GRID:
-                        channels = channels * 2
-                    if self.parameters.COORDCONV:
-                        channels += 2
-                    self.input = Input(shape=(self.stateReprLen, self.stateReprLen, channels))
-                    conv = self.input
+                    channels = 1
+                if self.parameters.CNN_LAST_GRID:
+                    channels = channels * 2
+                if self.parameters.COORDCONV:
+                    channels += 2
+                self.input = Input(shape=(self.stateReprLen, self.stateReprLen, channels))
+                conv = self.input
 
-                    if self.parameters.CNN_USE_L1:
-                        conv = Conv2D(self.kernel_1[2], kernel_size=(self.kernel_1[0], self.kernel_1[0]),
-                                       strides=(self.kernel_1[1], self.kernel_1[1]), activation='relu',
-                                       data_format='channels_last')(conv)
+                if self.parameters.CNN_USE_L1:
+                    conv = Conv2D(self.kernel_1[2], kernel_size=(self.kernel_1[0], self.kernel_1[0]),
+                                   strides=(self.kernel_1[1], self.kernel_1[1]), activation='relu',
+                                   data_format='channels_last')(conv)
 
-                    if self.parameters.CNN_USE_L2:
-                        conv = Conv2D(self.kernel_2[2], kernel_size=(self.kernel_2[0], self.kernel_2[0]),
-                                       strides=(self.kernel_2[1], self.kernel_2[1]), activation='relu',
-                                       data_format='channels_last')(conv)
+                if self.parameters.CNN_USE_L2:
+                    conv = Conv2D(self.kernel_2[2], kernel_size=(self.kernel_2[0], self.kernel_2[0]),
+                                   strides=(self.kernel_2[1], self.kernel_2[1]), activation='relu',
+                                   data_format='channels_last')(conv)
 
-                    if self.parameters.CNN_USE_L3:
-                        conv = Conv2D(self.kernel_3[2], kernel_size=(self.kernel_3[0], self.kernel_3[0]),
-                                       strides=(self.kernel_3[1], self.kernel_3[1]), activation='relu',
-                                       data_format='channels_last')(conv)
+                if self.parameters.CNN_USE_L3:
+                    conv = Conv2D(self.kernel_3[2], kernel_size=(self.kernel_3[0], self.kernel_3[0]),
+                                   strides=(self.kernel_3[1], self.kernel_3[1]), activation='relu',
+                                   data_format='channels_last')(conv)
 
-                    self.valueNetwork = Flatten()(conv)
+                self.valueNetwork = Flatten()(conv)
 
             # Not pixel input
             else:
@@ -392,8 +375,11 @@ class Network(object):
     def load(self, modelName):
         path = modelName
         self.loadedModelName = modelName
-        self.valueNetwork = keras.models.load_model(str(path) + "models/model.h5")
-        self.targetNetwork = load_model(path + "models/model.h5")
+        self.valueNetwork = keras.models.load_model(path)
+        self.targetNetwork = load_model(path)
+        if __debug__:
+            m = hashlib.md5(str(self.valueNetwork.get_weights()).encode('utf-8'))
+            print("Loaded network's weights hash: " + m.hexdigest())
 
 
     def trainOnBatch(self, inputs, targets, importance_weights):

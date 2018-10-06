@@ -182,6 +182,7 @@ class QLearn(object):
 
     def learn(self, batch, step):
         idxs, priorities =  self.train(batch)
+        self.updateNoise()
         if step % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.updateNetworks()
         self.latestTDerror = numpy.mean(priorities[-1])
@@ -241,6 +242,14 @@ class QLearn(object):
 
     def save(self, path, name = ""):
         self.network.saveModel(path, name)
+
+    def getUpdatedParams(self):
+        params = {}
+        params["EPSILON"] = self.epsilon
+        params["TEMPERATURE"] = self.temperature
+        if self.parameters.END_DISCOUNT:
+            params["DISCOUNT"] = self.discount
+        return params
 
     def getNoise(self):
         return self.epsilon
