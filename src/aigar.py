@@ -938,7 +938,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                 break
             # Get a signal from trainer
             trainer_signal = trainer_master_queue.get()
-            # Create or re-initialize worker pool every 'n' amount of training steps
+            # Create or re-initialize worker pool every 'n' amount of steps
             if trainer_signal == "RELOAD_COLLECTOR":
                 if __debug__:
                     print("Master received signal: 'RELOAD_COLLECTOR'")
