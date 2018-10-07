@@ -686,7 +686,10 @@ def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0
 
 
 def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
-    parameters = importlib.import_module('.networkParameters', package=getPackageName(modelPath))
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
+    parameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(parameters)
+    del SPEC_OS
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, {1+processNum}) # Core #1 is reserved for trainer process
@@ -788,7 +791,10 @@ def train(parameters, expReplayer, learningAlg, step):
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
 def trainOnExperiences(experience_queue, path, queue):
-    parameters = importlib.import_module('.networkParameters', package=getPackageName(path))
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(path))
+    parameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(parameters)
+    del SPEC_OS
     # Increase priority of this process
     num_cores = mp.cpu_count()
     if num_cores > 1:
@@ -877,7 +883,7 @@ def trainOnExperiences(experience_queue, path, queue):
     learningAlg.save(path, str(parameters.CURRENT_STEP + testInterval) + "_")
     params = learningAlg.getUpdatedParams()
     tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-    tweakedTotal.append(["CURRENT_STEP", CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
+    tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
     modifyParameterValue(tweakedTotal, path)
     # Signal that training has finished
     if __debug__:
