@@ -405,8 +405,8 @@ def createTestParams(packageName, virus=None, num_nn_bots=1, num_greedy_bots=0, 
     # Change parameters in testParameters module
     testParameters.GATHER_EXP = False
     testParameters.EPSILON = 0
-    # TODO: Temperature has to be set to 0 during testing, right?
     testParameters.TEMPERATURE = 0
+    testParameters.GAUSSIAN_NOISE = 0
     if virus != None:
         testParameters.VIRUS_SPAWN = virus
     testParameters.NUM_NN_BOTS = num_nn_bots
@@ -500,7 +500,6 @@ def exportTestResults(testResults, path, parameters):
 def performTest(testNetworkPath, specialParams):
     num_cores = mp.cpu_count()
     if num_cores > 1:
-        # TODO: Make tests more peregrine-efficient by only using cores which collectors aren't using
         os.sched_setaffinity(0, range(2, num_cores)) # Core #1 is reserved for trainer process
     testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
@@ -563,7 +562,6 @@ def testModel(testNetworkPath, testType, plotName, specialParams, n_tests, testN
 
 
 def testingProcedure(path, testNetworkPath, parameters, testName, n_tests):
-    # TODO: Make sure Actor critic noise is set to 0 while testing
     # TODO: Perform all test kinds simultaneously
     testEvals = {}
     masses = {}
@@ -1084,8 +1082,6 @@ def run():
     if numberOfHumans == 0:
         if parameters.ENABLE_TRAINING:
             trainingProcedure(parameters, model_in_subfolder, loadModel, modelPath, startTime)
-    else:
-        pass
     if parameters.ENABLE_TRAINING:
         print("--------")
         print("Training time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
