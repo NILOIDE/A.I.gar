@@ -357,6 +357,8 @@ def printTrainProgress(parameters, currentPart, startTime):
 def createNetwork(parameters, path):
     network = Network(parameters)
     network.saveModel(path)
+    if parameters.ENABLE_TRAINING:
+        network.saveModel(path, "0_")
 
 
 def createHumans(numberOfHumans, model1):
@@ -1069,9 +1071,9 @@ def run():
     parameters = importlib.import_module('.networkParameters', package=packageName)
 
     # Initialize network while number of humans is determined
-    print("\nInitializing network...\n")
-    p = mp.Process(target=createNetwork, args=(parameters, modelPath))
-    p.start()
+    if parameters.CURRENT_STEP == 0:
+        print("\nInitializing network...\n")
+        createNetwork(parameters, modelPath)
 
     # Determine number of humans
     numberOfHumans = 0
@@ -1081,8 +1083,6 @@ def run():
     if guiEnabled and viewEnabled and not numberOfHumans > 0:
         spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
 
-    # End network init parallel process
-    p.join()
 
     startTime = time.time()
     if numberOfHumans == 0:
@@ -1094,37 +1094,37 @@ def run():
         print("Average time per update:    " +
               str.format('{0:.3f}', (time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
         print("--------")
-        if parameters.ENABLE_TESTING:
-            testStartTime = time.time()
-            # Post train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing post-training tests...\n")
-            runFinalTests(modelPath, parameters)
-            print("\nFinal tests completed.\n")
-            # During train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing during training tests...")
-            testResults = []
-            smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
-            for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
-                testName = str(testPercent) + "%"
-                testStepNumber = testPercent * smallPart
-                testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
-                testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
-                                                    parameters.DUR_TRAIN_TEST_NUM)[0])
-            exportTestResults(testResults, modelPath, parameters)
-            print("\nDuring training tests completed.")
-            print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
-            modelPath = finalPathName(parameters, modelPath)
+    if parameters.ENABLE_TESTING:
+        testStartTime = time.time()
+        # Post train testing
+        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        print("Performing post-training tests...\n")
+        runFinalTests(modelPath, parameters)
+        print("\nFinal tests completed.\n")
+        # During train testing
+        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        print("Performing during training tests...")
+        testResults = []
+        smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+        for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
+            testName = str(testPercent) + "%"
+            testStepNumber = testPercent * smallPart
+            testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
+            testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                parameters.DUR_TRAIN_TEST_NUM)[0])
+        exportTestResults(testResults, modelPath, parameters)
+        print("\nDuring training tests completed.")
+        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
+        modelPath = finalPathName(parameters, modelPath)
         print("--------")
         print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
         print("--------")
-        if model_in_subfolder:
-            print(os.path.join(modelPath))
-            createCombinedModelGraphs(os.path.join(modelPath))
-        print("--------")
-        print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
-        print("--------")
+    if model_in_subfolder:
+        print(os.path.join(modelPath))
+        createCombinedModelGraphs(os.path.join(modelPath))
+    print("--------")
+    print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
+    print("--------")
 
 
 if __name__ == '__main__':
