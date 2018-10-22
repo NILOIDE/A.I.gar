@@ -870,7 +870,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                   "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
                   "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
                   "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
-                  str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)\n")
+                  str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)")
             if parameters.EXP_REPLAY_ENABLED:
                 print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
             print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
@@ -882,7 +882,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             queue.put("PRINT_TRAIN_PROGRESS")
         # Train 1 step
         batch = []
-        while len(batch) < parameters.NUM_COLLECTORS:
+        while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
             batch.append(experience_queue.get())
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
@@ -903,10 +903,10 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
             print("Trainer saved weights hash: " + m.hexdigest())
 
-        # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
-        params = learningAlg.getUpdatedParams()
-        tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-        modifyParameterValue(tweakedTotal, path)
+        # # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
+        # params = learningAlg.getUpdatedParams()
+        # tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
+        # modifyParameterValue(tweakedTotal, path)
         # Let collectors begin collecting
         collector_events["proceed"].set()
 

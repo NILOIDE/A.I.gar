@@ -236,9 +236,9 @@ class Bot(object):
 
             if self.player.getIsAlive():
                 self.lastMass = self.player.getTotalMass()
-            else:
-                # TODO: This should probably be removed
-                self.reset()
+            # else:
+            #     # TODO: This should probably be removed
+            #     self.reset()
 
 
     def setExploring(self, val):
