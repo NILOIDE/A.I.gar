@@ -733,7 +733,10 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
         events["proceed"].clear()
         events["proceed"].wait()
         for bot in model.getBots():
-            bot.getLearningAlg().setValueNetWeights(weight_manager)
+            bot.getLearningAlg().setValueNetWeights(weight_manager[0])
+            if __debug__:
+                m = hashlib.md5(str(bot.getLearningAlg().getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+                print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if step > parameters.RESET_LIMIT-parameters.FRAME_SKIP_RATE+2:
             botMasses = []
             for bot in model.getBots():
@@ -741,6 +744,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
                 bot.resetMassList()
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
                   "Collector #" + str(processNum) + " had an episode mean mass of " + str(int(np.mean(botMasses))) + "\n" +
+                  str(np.shape(botMasses)) + str(np.sum(botMasses)) + "\n" +
                   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
             model.resetModel()
             step = 0
@@ -820,8 +824,11 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     p.nice(0)
     networkPath = path + "models/model.h5"
     learningAlg = createLearner(parameters, networkPath)
+    weight_manager.append(learningAlg.getNetwork().getValueNetwork().get_weights())
+    if __debug__:
+        m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+        print("Trainer saved weights hash: " + m.hexdigest())
     collector_events["proceed"].set()
-    weight_manager = learningAlg.getNetwork().getValueNetwork().get_weights()
     if EXP_REPLAY_ENABLED:
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
             expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
@@ -838,7 +845,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             for experience in experience_queue.get():
                 collector_events["proceed"].set()
                 expReplayer.add(*experience)
-            print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
+            if __debug__:
+                print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
         # TODO: Start with buffer completely full?
         # TODO: can experiences be added in batch in Prioritized Replay Buffer?
         print("Initial experience collection completed.")
@@ -848,27 +856,24 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     print("////////////////////////////////////////////////////////////////////\n")
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    printSteps = 100
+    printSteps = 1000
+    timeStep = time.time()
+
     for step in range(parameters.CURRENT_STEP, parameters.CURRENT_STEP + testInterval):
-        if __debug__:
-            if step != parameters.CURRENT_STEP and step % printSteps == 0:
-                coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
-                test_stepsLeft = testInterval - (step % testInterval)
-                targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
-                save_stepsLeft = network_saveSteps - (step % network_saveSteps)
-                elapsedTime = time.time() - timeStep
-                print("____________________________________________________________________\n" +
-                      "Steps before collector network update:      " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk) + "\n" +
-                      "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
-                      "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
-                      "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
-                      "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
-                      str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)\n")
-                if parameters.EXP_REPLAY_ENABLED:
-                    print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
-                print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
+        if step != parameters.CURRENT_STEP and step % printSteps == 0:
+            test_stepsLeft = testInterval - (step % testInterval)
+            targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
+            elapsedTime = time.time() - timeStep
+            print("____________________________________________________________________\n" +
+                  "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
+                  "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
+                  "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
+                  "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
+                  str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)\n")
+            if parameters.EXP_REPLAY_ENABLED:
+                print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
+            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
         # Check if we should print the training progress percentage
         if step != parameters.CURRENT_STEP and step % smallPart == 0:
@@ -893,10 +898,10 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             # print(numpy.shape(batch))
             _,_,_ = learningAlg.learn(batch, step)
 
-        weight_manager = learningAlg.getNetwork().getValueNetwork().get_weights()
-        # if __debug__:
-        #     m = hashlib.md5(str(weight_manager).encode('utf-8'))
-        #     print("Trainer saved weights hash: " + m.hexdigest())
+        weight_manager[0] = learningAlg.getNetwork().getValueNetwork().get_weights()
+        if __debug__:
+            m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+            print("Trainer saved weights hash: " + m.hexdigest())
 
         # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
         params = learningAlg.getUpdatedParams()

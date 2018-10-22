@@ -11,7 +11,6 @@ from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, In
 from keras.models import Sequential
 from keras.models import load_model, save_model
 from keras.constraints import maxnorm
-import hashlib
 
 from .parameters import *
 
@@ -377,15 +376,9 @@ class Network(object):
         self.loadedModelName = modelName
         self.valueNetwork = keras.models.load_model(path)
         self.targetNetwork = load_model(path)
-        # if __debug__:
-        #     m = hashlib.md5(str(self.valueNetwork.get_weights()).encode('utf-8'))
-        #     print("Loaded network's weights hash: " + m.hexdigest())
 
     def setWeights(self, weights):
         self.valueNetwork.set_weights(weights)
-        # if __debug__:
-        #     m = hashlib.md5(str(self.valueNetwork.get_weights()).encode('utf-8'))
-        #     print("Loaded network's weights hash: " + m.hexdigest())
 
     def trainOnBatch(self, inputs, targets, importance_weights):
         if self.parameters.NEURON_TYPE == "LSTM":

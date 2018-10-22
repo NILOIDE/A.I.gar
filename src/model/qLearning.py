@@ -241,6 +241,7 @@ class QLearn(object):
             print("")
         newAction = self.network.actions[newActionIdx]
 
+        self.updateNoise()
         return newActionIdx, newAction
 
     def save(self, path, name = ""):
