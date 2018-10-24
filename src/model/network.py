@@ -1,6 +1,6 @@
 import keras
 import os
-
+import time
 keras.backend.set_image_dim_ordering('tf')
 import numpy
 
@@ -11,7 +11,6 @@ from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, In
 from keras.models import Sequential
 from keras.models import load_model, save_model
 from keras.constraints import maxnorm
-import hashlib
 
 from .parameters import *
 
@@ -377,10 +376,9 @@ class Network(object):
         self.loadedModelName = modelName
         self.valueNetwork = keras.models.load_model(path)
         self.targetNetwork = load_model(path)
-        if __debug__:
-            m = hashlib.md5(str(self.valueNetwork.get_weights()).encode('utf-8'))
-            print("Loaded network's weights hash: " + m.hexdigest())
 
+    def setWeights(self, weights):
+        self.valueNetwork.set_weights(weights)
 
     def trainOnBatch(self, inputs, targets, importance_weights):
         if self.parameters.NEURON_TYPE == "LSTM":
@@ -518,20 +516,8 @@ class Network(object):
     def getGridSquaresPerFov(self):
         return self.gridSquaresPerFov
 
-    def getTargetNetworkMaxSteps(self):
-        return self.targetNetworkMaxSteps
-
     def getStateReprLen(self):
         return self.stateReprLen
-
-    def getHiddenLayer1(self):
-        return self.hiddenLayer1
-
-    def getHiddenLayer2(self):
-        return self.hiddenLayer2
-
-    def getHiddenLayer3(self):
-        return self.hiddenLayer3
 
     def getNumActions(self):
         return self.num_actions

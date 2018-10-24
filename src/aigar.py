@@ -357,6 +357,8 @@ def printTrainProgress(parameters, currentPart, startTime):
 def createNetwork(parameters, path):
     network = Network(parameters)
     network.saveModel(path)
+    if parameters.ENABLE_TRAINING:
+        network.saveModel(path, "0_")
 
 
 def createHumans(numberOfHumans, model1):
@@ -685,8 +687,11 @@ def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
 
-def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath):
-    parameters = importlib.import_module('.networkParameters', package=getPackageName(modelPath))
+def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events, weight_manager):
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
+    parameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(parameters)
+    del SPEC_OS
     num_cores = mp.cpu_count()
     if num_cores > 1:
         os.sched_setaffinity(0, {1+processNum}) # Core #1 is reserved for trainer process
@@ -695,39 +700,57 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     # Create game instance
     model = Model(False, False, parameters)
     networkLoadPath = modelPath + "models/model.h5"
+    events["proceed"].wait()
     createModelPlayers(parameters, model, networkLoadPath)
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     model.initialize()
-    gameSteps_req_for_exp_push = parameters.COLLECTOR_QUEUE_PUT_EXPS * (parameters.FRAME_SKIP_RATE + 1) + 1
+    step = 0
+    # Move collector to it's required step progression (to break correlations between game stage across collectors)
+    for i in range(processNum * int(parameters.RESET_LIMIT / parameters.NUM_COLLECTORS)):
+        model.update()
+        step += 1
+    model.resetBots()
     # Run game until terminated
-    stepCount = 0
     while True:
-        for step in range(parameters.RESET_LIMIT):
+        for _ in range(parameters.FRAME_SKIP_RATE+2):
             model.update()
-            stepCount += 1
-            # After a bot has 'n' amount of experiences, send them to trainer.
-            if stepCount %  gameSteps_req_for_exp_push == 0:
-                # TODO: After episode completes bot will have more exp than pushing batch expects
-                all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
-                if __debug__:
-                    shape = np.shape(all_experienceLists)
-                    print("Collector #" + str(processNum) + " is adding to experience queue " +
-                          str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
-                for experienceList in all_experienceLists:
-                    experience_queue.put(experienceList)
-                stepCount = 0
-                model.resetBots()
+            step += 1
+        # After a bot has 'n' amount of experiences, send them to trainer.
+        # TODO: Modify params such as epsilon
+        all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
         if __debug__:
+            shape = np.shape(all_experienceLists)
+            print("Collector #" + str(processNum) + " is adding to experience queue " +
+                  str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
+        for experienceList in all_experienceLists:
+            if len(experienceList) != 1:
+                print("Bot collected the wrong amount of experiences this step (" + str(len(experienceList)) +")")
+                print("Quitting...")
+                quit()
+            experience_queue.put(experienceList)
+        model.resetBots()
+        events["proceed"].clear()
+        events["proceed"].wait()
+        for bot in model.getBots():
+            bot.getLearningAlg().setValueNetWeights(weight_manager[0])
+            if __debug__:
+                m = hashlib.md5(str(bot.getLearningAlg().getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+                print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
+        if step > parameters.RESET_LIMIT-parameters.FRAME_SKIP_RATE+2:
             botMasses = []
             for bot in model.getBots():
                 botMasses.append(bot.getMassOverTime())
                 bot.resetMassList()
-            print("Collector #" + str(processNum) + " had an episode mean mass of " + str(int(np.mean(botMasses))))
-        model.resetModel()
+            print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
+                  "Collector #" + str(processNum) + " had an episode mean mass of " + str(int(np.mean(botMasses))) + "\n" +
+                  str(np.shape(botMasses)) + str(np.sum(botMasses)) + "\n" +
+                  "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+            model.resetModel()
+            step = 0
 
 
-def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path):
+def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, events, weight_manager):
     startTime = time.time()
     print("*********************************************************************")
     print("Initializing collectors...")
@@ -738,7 +761,7 @@ def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, 
     collectors = []
     for processNum in range(numWorkers):
         p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder,
-                                                       loadModel, path))
+                                                       loadModel, path, events, weight_manager))
         p.start()
         collectors.append(p)
     print("Collectors initialized.")
@@ -773,9 +796,10 @@ def createLearner(parameters, path):
     return learningAlg
 
 
-def train(parameters, expReplayer, learningAlg, step):
+def train_expReplay(parameters, expReplayer, learningAlg, step):
     # TODO: Use GPU
     batch = expReplayer.sample(parameters.MEMORY_BATCH_LEN)
+
     idxs, priorities, updated_actions = learningAlg.learn(batch, step)
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
         expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
@@ -787,8 +811,11 @@ def train(parameters, expReplayer, learningAlg, step):
 
 
 # Train for 'MAX_TRAINING_STEPS'. Meanwhile send signals back to master process to notify of training process.
-def trainOnExperiences(experience_queue, path, queue):
-    parameters = importlib.import_module('.networkParameters', package=getPackageName(path))
+def trainOnExperiences(experience_queue, collector_events, path, queue, weight_manager):
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(path))
+    parameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(parameters)
+    del SPEC_OS
     # Increase priority of this process
     num_cores = mp.cpu_count()
     if num_cores > 1:
@@ -797,87 +824,99 @@ def trainOnExperiences(experience_queue, path, queue):
     p.nice(0)
     networkPath = path + "models/model.h5"
     learningAlg = createLearner(parameters, networkPath)
-    if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-        expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
-    else:
-        expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
-    # TODO: Uncomment for Anton's LSTM expReplay stuff
-    # expReplayer = ExpReplay(parameters)
+    weight_manager.append(learningAlg.getNetwork().getValueNetwork().get_weights())
+    if __debug__:
+        m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+        print("Trainer saved weights hash: " + m.hexdigest())
+    collector_events["proceed"].set()
+    if EXP_REPLAY_ENABLED:
+        if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
+            expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
+        else:
+            expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
+        # TODO: Uncomment for Anton's LSTM expReplay stuff
+        # expReplayer = ExpReplay(parameters)
 
-    # Collect enough experiences before training
-    print("\n******************************************************************")
-    print("Beginning initial experience collection...\n")
-    collectionTime = time.time()
-    while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
-        for experience in experience_queue.get():
-            expReplayer.add(*experience)
-        print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
-    # TODO: Start with buffer completely full?
-    # TODO: can experiences be added in batch in Prioritized Replay Buffer?
-    print("Initial experience collection completed.")
-    print("Current replay buffer size:   ", len(expReplayer))
-    print("Collection time elapsed:      " + str.format('{0:.3f}', time.time() - collectionTime) + "s")
+        # Collect enough experiences before training
+        print("\n******************************************************************")
+        print("Beginning initial experience collection...\n")
+        collectionTime = time.time()
+        while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
+            for experience in experience_queue.get():
+                collector_events["proceed"].set()
+                expReplayer.add(*experience)
+            if __debug__:
+                print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
+        # TODO: Start with buffer completely full?
+        # TODO: can experiences be added in batch in Prioritized Replay Buffer?
+        print("Initial experience collection completed.")
+        print("Current replay buffer size:   ", len(expReplayer))
+        print("Collection time elapsed:      " + str.format('{0:.3f}', time.time() - collectionTime) + "s")
     print("\nBeggining to train...")
     print("////////////////////////////////////////////////////////////////////\n")
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    coll_stepChunk = parameters.COLLECTOR_UPDATE_STEPS
-    network_saveSteps = smallPart * parameters.NETWORK_SAVE_PERCENT_STEPS
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    printSteps = 100
+    printSteps = 1000
+    timeStep = time.time()
+
     for step in range(parameters.CURRENT_STEP, parameters.CURRENT_STEP + testInterval):
-        if __debug__:
-            if step != parameters.CURRENT_STEP and step % printSteps == 0:
-                coll_stepsLeft = coll_stepChunk - (step % coll_stepChunk)
-                test_stepsLeft = testInterval - (step % testInterval)
-                targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
-                save_stepsLeft = network_saveSteps - (step % network_saveSteps)
-                elapsedTime = time.time() - timeStep
-                print("____________________________________________________________________\n" +
-                      "Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n" +
-                      "Steps before collector network update:      " + str(coll_stepsLeft) + " | Total: " + str(coll_stepChunk) + "\n" +
-                      "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
-                      "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
-                      "Steps before saving network:                " + str(save_stepsLeft) + " | Total: " + str(network_saveSteps) + "\n" +
-                      "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
-                      "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
-                      str.format('{0:.3f}', elapsedTime*1000.0/printSteps) + "ms/step)\n" +
-                      "¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
+        if step != parameters.CURRENT_STEP and step % printSteps == 0:
+            test_stepsLeft = testInterval - (step % testInterval)
+            targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
+            elapsedTime = time.time() - timeStep
+            print("____________________________________________________________________\n" +
+                  "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
+                  "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
+                  "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
+                  "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
+                  str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)")
+            if parameters.EXP_REPLAY_ENABLED:
+                print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
+            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
         # Check if we should print the training progress percentage
         if step != parameters.CURRENT_STEP and step % smallPart == 0:
             if __debug__:
                 print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
             queue.put("PRINT_TRAIN_PROGRESS")
-        # Check if collectors should have their networks reloaded
-        if step != parameters.CURRENT_STEP and step % coll_stepChunk == 0:
-            # Update model.h5 network file
-            if __debug__:
-                print("Saving network...")
-            learningAlg.save(path)
-            # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
-            params = learningAlg.getUpdatedParams()
-            tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-            modifyParameterValue(tweakedTotal, path)
-            if __debug__:
-                print("Trainer sending signal: 'RELOAD_COLLECTOR'")
-            queue.put("RELOAD_COLLECTOR")
-        # Get collector experiences from mp.Queue and add them to buffer
-        if not experience_queue.empty():
-            queueTimer = time.time()
-            for experience in experience_queue.get():
-                expReplayer.add(*experience)
-            if __debug__:
-                print("Trainer time taken to get experiences and add them to expReplay: " + str.format('{0:.3f}', time.time()-queueTimer))
         # Train 1 step
-        train(parameters, expReplayer, learningAlg, step)
+        batch = []
+        while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
+            batch.append(experience_queue.get())
+        if __debug__:
+            print("Trainer received a lists of " + str(len(batch)) + " exps.")
+        # print(np.shape(batch))
+        if parameters.EXP_REPLAY_ENABLED:
+            for experience in batch:
+                expReplayer.add(*(experience[0]))
+            train_expReplay(parameters, expReplayer, learningAlg, step)
+        else:
+            tr_batch = numpy.array(batch).transpose()
+            # print(tr_batch)
+            batch = (tr_batch[0,0,:], tr_batch[1,0,:], tr_batch[2,0,:], tr_batch[3,0,:], tr_batch[4,0,:])
+            # print(numpy.shape(batch))
+            _,_,_ = learningAlg.learn(batch, step)
+
+        weight_manager[0] = learningAlg.getNetwork().getValueNetwork().get_weights()
+        if __debug__:
+            m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
+            print("Trainer saved weights hash: " + m.hexdigest())
+
+        # # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
+        # params = learningAlg.getUpdatedParams()
+        # tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
+        # modifyParameterValue(tweakedTotal, path)
+        # Let collectors begin collecting
+        collector_events["proceed"].set()
 
     if __debug__:
         print("Copying network to new file '" + str(parameters.CURRENT_STEP + testInterval) + "_model.h5 ...")
+    learningAlg.save(path)
     learningAlg.save(path, str(parameters.CURRENT_STEP + testInterval) + "_")
     params = learningAlg.getUpdatedParams()
     tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-    tweakedTotal.append(["CURRENT_STEP", CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
+    tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
     modifyParameterValue(tweakedTotal, path)
     # Signal that training has finished
     if __debug__:
@@ -901,17 +940,19 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     trainInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     num_cores = mp.cpu_count()
     if num_cores > 1:
-        os.sched_setaffinity(0, range(1+parameters.NUM_COLLECTORS,num_cores))  # Core #0 is reserved for trainer process
+        os.sched_setaffinity(0, {num_cores-1})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
         trainer_timeStart = time.time()
         killTrainer = False
         # Create collectors and exp queue
         experience_queue = mp.Queue()
-        collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path)
+        collector_events = {"proceed": mp.Event()}
+        weight_manager = mp.Manager().list()
+        collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, collector_events, weight_manager)
         # Create training process and communication pipe
         trainer_master_queue = mp.Queue()
         # TODO: Create multiple learners
-        trainer = mp.Process(target=trainOnExperiences, args=(experience_queue, path, trainer_master_queue))
+        trainer = mp.Process(target=trainOnExperiences, args=(experience_queue, collector_events, path, trainer_master_queue, weight_manager))
         trainer.start()
         # Training is split into periods. In case there is a training failure or early stop, training progress will be
         # re-started from previous save point.
@@ -923,7 +964,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         while True:
             # While trainer has sent no signal, check if trainer should be terminated
             while trainer_master_queue.empty():
-                sleep(0.01)
+                sleep(1)
                 if time.time() - trainer_timeStart > 30*60: #Time elapsed is over 30 mins
                     killTrainer = True
                     break
@@ -933,24 +974,13 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                       "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
                 trainer.terminate()
                 trainer.join(timeout=0.001)
+                terminateExperienceCollectors(collectors)
+                # In the case trainer was early terminated, this assignment will cause progress to revert to previous training interval
+                currentPart = currentPart - (currentPart % trainInterval)
                 break
             # Get a signal from trainer
             trainer_signal = trainer_master_queue.get()
-            # Create or re-initialize worker pool every 'n' amount of training steps
-            if trainer_signal == "RELOAD_COLLECTOR":
-                if __debug__:
-                    print("Master received signal: 'RELOAD_COLLECTOR'")
-                terminateExperienceCollectors(collectors)
-                collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder,
-                                                       loadModel, path)
-                if __debug__:
-                    print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
-                    children = mp.active_children()
-                    print("Number of alive child processes:    " + str(len(children)))
-                    for p in children:
-                        print(p)
-                    print("¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤")
-            # Check if 1% of training time has elapsed
+            # Print when 1% of training time has elapsed
             if trainer_signal == "PRINT_TRAIN_PROGRESS":
                 if __debug__:
                     print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
@@ -960,15 +990,12 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                 if __debug__:
                     print("Master received signal: 'DONE'")
                 trainer.join(timeout=0.001)
+                terminateExperienceCollectors(collectors)
                 currentPart = printTrainProgress(parameters, currentPart, startTime)
                 break
         print("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n" +
               "Training period ended.\n" +
               "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
-        terminateExperienceCollectors(collectors)
-        # In the case trainer was early terminated, this assignment will cause progress to revert to previous training interval
-        if killTrainer:
-            currentPart = currentPart - (currentPart % trainInterval)
 
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
     print("Training done.\n")
@@ -1063,9 +1090,11 @@ def run():
     parameters = importlib.import_module('.networkParameters', package=packageName)
 
     # Initialize network while number of humans is determined
-    print("\nInitializing network...\n")
-    p = mp.Process(target=createNetwork, args=(parameters, modelPath))
-    p.start()
+    if parameters.CURRENT_STEP == 0:
+        print("\nInitializing network...\n")
+        p = mp.Process(target=createNetwork, args=(parameters, modelPath))
+        p.start()
+        p.join()
 
     # Determine number of humans
     numberOfHumans = 0
@@ -1075,8 +1104,6 @@ def run():
     if guiEnabled and viewEnabled and not numberOfHumans > 0:
         spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
 
-    # End network init parallel process
-    p.join()
 
     startTime = time.time()
     if numberOfHumans == 0:
@@ -1088,37 +1115,37 @@ def run():
         print("Average time per update:    " +
               str.format('{0:.3f}', (time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
         print("--------")
-        if parameters.ENABLE_TESTING:
-            testStartTime = time.time()
-            # Post train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing post-training tests...\n")
-            runFinalTests(modelPath, parameters)
-            print("\nFinal tests completed.\n")
-            # During train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing during training tests...")
-            testResults = []
-            smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
-            for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
-                testName = str(testPercent) + "%"
-                testStepNumber = testPercent * smallPart
-                testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
-                testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
-                                                    parameters.DUR_TRAIN_TEST_NUM)[0])
-            exportTestResults(testResults, modelPath, parameters)
-            print("\nDuring training tests completed.")
-            print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
-            modelPath = finalPathName(parameters, modelPath)
+    if parameters.ENABLE_TESTING:
+        testStartTime = time.time()
+        # Post train testing
+        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        print("Performing post-training tests...\n")
+        runFinalTests(modelPath, parameters)
+        print("\nFinal tests completed.\n")
+        # During train testing
+        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+        print("Performing during training tests...")
+        testResults = []
+        smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+        for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
+            testName = str(testPercent) + "%"
+            testStepNumber = testPercent * smallPart
+            testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
+            testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                parameters.DUR_TRAIN_TEST_NUM)[0])
+        exportTestResults(testResults, modelPath, parameters)
+        print("\nDuring training tests completed.")
+        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
+        modelPath = finalPathName(parameters, modelPath)
         print("--------")
         print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
         print("--------")
-        if model_in_subfolder:
-            print(os.path.join(modelPath))
-            createCombinedModelGraphs(os.path.join(modelPath))
-        print("--------")
-        print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
-        print("--------")
+    if model_in_subfolder:
+        print(os.path.join(modelPath))
+        createCombinedModelGraphs(os.path.join(modelPath))
+    print("--------")
+    print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
+    print("--------")
 
 
 if __name__ == '__main__':

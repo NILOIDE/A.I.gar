@@ -85,6 +85,9 @@ class QLearn(object):
         if modelName is not None:
             self.network.load(modelName)
 
+    def setValueNetWeights(self, weights):
+        self.network.setWeights(weights)
+
     def reset(self):
         self.latestTDerror = None
         if self.parameters.NEURON_TYPE == "LSTM":
@@ -142,14 +145,14 @@ class QLearn(object):
                 inputs = [inputs, extraInput]
         else:
             inputs = numpy.zeros((batch_len, self.input_len))
-
+        # print(batch)
         targets = numpy.zeros((batch_len, self.output_len))
-
         idxs =  batch[6] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else None
         importance_weights = batch[5] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else numpy.zeros(batch_len)
         priorities = numpy.zeros_like(importance_weights)
 
         for sample_idx in range(batch_len):
+
             old_s, a, r, new_s = batch[0][sample_idx], batch[1][sample_idx], batch[2][sample_idx], batch[3][sample_idx]
             # No new state: dead
             if self.parameters.USE_ACTION_AS_INPUT:
@@ -183,7 +186,7 @@ class QLearn(object):
     def learn(self, batch, step):
         idxs, priorities =  self.train(batch)
         self.updateNoise()
-        if step % self.parameters.TARGET_NETWORK_STEPS == 0:
+        if (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.updateNetworks()
         self.latestTDerror = numpy.mean(priorities[-1])
         return idxs, priorities, None
@@ -238,6 +241,7 @@ class QLearn(object):
             print("")
         newAction = self.network.actions[newActionIdx]
 
+        self.updateNoise()
         return newActionIdx, newAction
 
     def save(self, path, name = ""):
