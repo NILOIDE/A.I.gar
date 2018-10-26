@@ -722,7 +722,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
         if __debug__:
             shape = np.shape(all_experienceLists)
             print("Collector #" + str(processNum) + " is adding to experience queue " +
-                  str(shape[0]) + " lists of " + str(shape[1]) + " exps each.")
+                  str(shape[0]) + " lists.")
         for experienceList in all_experienceLists:
             if len(experienceList) != 1:
                 print("Bot collected the wrong amount of experiences this step (" + str(len(experienceList)) +")")
@@ -734,7 +734,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
         events["proceed"].wait()
         for bot in model.getBots():
             bot.getLearningAlg().setValueNetWeights(weight_manager[0])
-            if __debug__:
+            if __debug__ and parameters.VERY_DEBUG:
                 m = hashlib.md5(str(bot.getLearningAlg().getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
                 print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if step > parameters.RESET_LIMIT-parameters.FRAME_SKIP_RATE+2:
@@ -825,7 +825,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     networkPath = path + "models/model.h5"
     learningAlg = createLearner(parameters, networkPath)
     weight_manager.append(learningAlg.getNetwork().getValueNetwork().get_weights())
-    if __debug__:
+    if __debug__ and parameters.VERY_DEBUG:
         m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
         print("Trainer saved weights hash: " + m.hexdigest())
     collector_events["proceed"].set()
@@ -847,6 +847,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                 expReplayer.add(*experience)
             if __debug__:
                 print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
+        print("\n******************************************************************")
         # TODO: Start with buffer completely full?
         # TODO: can experiences be added in batch in Prioritized Replay Buffer?
         print("Initial experience collection completed.")
@@ -860,8 +861,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     printSteps = 1000
     timeStep = time.time()
 
-    for step in range(parameters.CURRENT_STEP, parameters.CURRENT_STEP + testInterval):
-        if step != parameters.CURRENT_STEP and step % printSteps == 0:
+    for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
+        if step % printSteps == 0:
             test_stepsLeft = testInterval - (step % testInterval)
             targNet_stepsLeft = targNet_stepChunk - (step % targNet_stepChunk)
             elapsedTime = time.time() - timeStep
@@ -875,11 +876,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                 print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
             print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
-        # Check if we should print the training progress percentage
-        if step != parameters.CURRENT_STEP and step % smallPart == 0:
-            if __debug__:
-                print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
-            queue.put("PRINT_TRAIN_PROGRESS")
+
         # Train 1 step
         batch = []
         while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
@@ -893,31 +890,31 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             train_expReplay(parameters, expReplayer, learningAlg, step)
         else:
             tr_batch = numpy.array(batch).transpose()
-            # print(tr_batch)
             batch = (tr_batch[0,0,:], tr_batch[1,0,:], tr_batch[2,0,:], tr_batch[3,0,:], tr_batch[4,0,:])
-            # print(numpy.shape(batch))
             _,_,_ = learningAlg.learn(batch, step)
 
         weight_manager[0] = learningAlg.getNetwork().getValueNetwork().get_weights()
-        if __debug__:
+        if __debug__ and parameters.VERY_DEBUG:
             m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
             print("Trainer saved weights hash: " + m.hexdigest())
 
-        # # Get update parameters by learnAlg and save them to networkParameters.py (so collectors are up-to-date)
-        # params = learningAlg.getUpdatedParams()
-        # tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-        # modifyParameterValue(tweakedTotal, path)
         # Let collectors begin collecting
         collector_events["proceed"].set()
 
-    if __debug__:
-        print("Copying network to new file '" + str(parameters.CURRENT_STEP + testInterval) + "_model.h5 ...")
-    learningAlg.save(path)
-    learningAlg.save(path, str(parameters.CURRENT_STEP + testInterval) + "_")
-    params = learningAlg.getUpdatedParams()
-    tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-    tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
-    modifyParameterValue(tweakedTotal, path)
+        if (step+1) % testInterval == 0:
+            if __debug__:
+                print("Copying network to new file '" + str(parameters.CURRENT_STEP + testInterval) + "_model.h5 ...")
+            learningAlg.save(path)
+            learningAlg.save(path, str(parameters.CURRENT_STEP + testInterval) + "_")
+            params = learningAlg.getUpdatedParams()
+            tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
+            tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
+            modifyParameterValue(tweakedTotal, path)
+        # Check if we should print the training progress percentage
+        if (step+1) % smallPart == 0:
+            if __debug__:
+                print("Trainer sending signal: 'PRINT_TRAIN_PROGRESS'")
+            queue.put("PRINT_TRAIN_PROGRESS")
     # Signal that training has finished
     if __debug__:
         print("Trainer sending signal: 'DONE'")
