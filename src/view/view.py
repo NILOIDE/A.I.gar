@@ -291,6 +291,10 @@ class View:
     def getFullRGB(self):
         return pygame.surfarray.array3d(self.screen)
 
+    def closeView(self):
+        pygame.display.quit()
+        pygame.quit()
+
 
 
 

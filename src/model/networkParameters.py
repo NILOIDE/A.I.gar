@@ -2,6 +2,8 @@ ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
 
 Default = False
 VERY_DEBUG = False
+VIEW_ENABLED = False
+GUI_COLLECTOR_SET = {1}
 
 # Game
 PELLET_SPAWN = True

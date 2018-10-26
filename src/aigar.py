@@ -625,52 +625,6 @@ def runFinalTests(path, parameters):
         plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
 
 
-def performGuiModel(parameters, enableTrainMode, loadedModelName, model_in_subfolder, loadModel, modelPath, algorithm,
-                    guiEnabled, viewEnabled, numberOfHumans, spectate):
-
-    mouseEnabled = True
-    humanTraining = False
-    if fitsLimitations(numberOfHumans, MAXHUMANPLAYERS):
-        # createHumans(numberOfHumans, model)
-        if numberOfHumans > 0 and not humanTraining:
-            mouseEnabled = int(input("Do you want control Player1 using the mouse? (1 == yes)\n"))
-
-    model = Model(guiEnabled, viewEnabled, parameters, True)
-    model.setTrainingEnabled(enableTrainMode == 1)
-    if spectate == 1:
-        model.addPlayerSpectator()
-
-    createModelPlayers(parameters, model, numberOfHumans, algorithm, loadModel)
-
-    Bot.init_exp_replayer(parameters, loadedModelName)
-    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, enableTrainMode)
-
-    model.initialize(loadModel)
-    screenWidth, screenHeight = defineScreenSize(numberOfHumans)
-
-    testResults = None
-    if guiEnabled:
-        view = View(model, screenWidth, screenHeight, parameters)
-        controller = Controller(model, viewEnabled, view, mouseEnabled)
-        view.draw()
-        while controller.running:
-            controller.process_input()
-            model.update()
-    else:
-        maxSteps = parameters.MAX_SIMULATION_STEPS
-        smallPart = max(int(maxSteps / 100), 1)  # constitutes one percent of total training time
-        testPercentage = smallPart * 5
-
-        for step in range(maxSteps):
-            model.update()
-            if step % smallPart == 0 and step != 0:
-                print("Trained: ", round(step / maxSteps * 100, 1), "%")
-                # Test every 5% of training
-            if parameters.ENABLE_TESTING:
-                if step % testPercentage == 0:
-                    testResults = updateTestResults(testResults, model, round(step / maxSteps * 100, 1), parameters)
-
-
 def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0):
     numberOfNNBots = parameters.NUM_NN_BOTS
     numberOfGreedyBots = parameters.NUM_GREEDY_BOTS
@@ -687,37 +641,74 @@ def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0
     createBots(parameters.NUM_RANDOM_BOTS, model, "Random", parameters)
 
 
-def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events, weight_manager):
+def process_controller_input(controller, view, model):
+    if controller.running:
+        controller.process_input()
+        return True
+    else:
+        view.closeView()
+        model.set_GUI(False)
+        print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n" +
+              "VIEW WINDOW HAS BEEN CLOSED\n" +
+              "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n")
+        return False
+
+def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events,
+                      weight_manager, guiEnabled, spectate):
     SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
     parameters = importlib.util.module_from_spec(SPEC_OS)
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
     num_cores = mp.cpu_count()
     if num_cores > 1:
-        os.sched_setaffinity(0, {1+processNum}) # Core #1 is reserved for trainer process
+        os.sched_setaffinity(0, {processNum}) # Core #1 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
+
     # Create game instance
-    model = Model(False, False, parameters)
     networkLoadPath = modelPath + "models/model.h5"
-    events["proceed"].wait()
-    createModelPlayers(parameters, model, networkLoadPath)
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
+    processInGUISet = processNum in parameters.GUI_COLLECTOR_SET
+    if processInGUISet:
+        model = Model(guiEnabled, parameters.VIEW_ENABLED, parameters)
+    else:
+        model = Model(False, False, parameters)
+    createModelPlayers(parameters, model, networkLoadPath)
     model.initialize()
     step = 0
+
+    # if parameters.ENABLE_TRAINING:
+    if processInGUISet:
+        if guiEnabled:
+            if spectate == 1:
+                model.addPlayerSpectator()
+            view = View(model, int(SCREEN_WIDTH), int(SCREEN_HEIGHT), parameters)
+            controller = Controller(model, parameters.VIEW_ENABLED, view, True)
+            view.draw()
+
     # Move collector to it's required step progression (to break correlations between game stage across collectors)
-    for i in range(processNum * int(parameters.RESET_LIMIT / parameters.NUM_COLLECTORS)):
+    if __debug__:
+        print("Desynchronizing worker #" + str(processNum) + "...")
+    for i in range((processNum-1) * int(parameters.RESET_LIMIT / parameters.NUM_COLLECTORS)):
+        if guiEnabled and processInGUISet:
+            guiEnabled = process_controller_input(controller, view, model)
         model.update()
         step += 1
     model.resetBots()
+    if __debug__:
+        print("Finished desynchronizing worker #" + str(processNum) + ".")
+    events[processNum].set()
+    events["proceed"].wait()
+
     # Run game until terminated
     while True:
         for _ in range(parameters.FRAME_SKIP_RATE+2):
+            if guiEnabled and processInGUISet:
+                guiEnabled = process_controller_input(controller, view, model)
             model.update()
             step += 1
         # After a bot has 'n' amount of experiences, send them to trainer.
-        # TODO: Modify params such as epsilon
         all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
         if __debug__:
             shape = np.shape(all_experienceLists)
@@ -743,14 +734,16 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
                 botMasses.append(bot.getMassOverTime())
                 bot.resetMassList()
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
-                  "Collector #" + str(processNum) + " had an episode mean mass of " + str(int(np.mean(botMasses))) + "\n" +
-                  str(np.shape(botMasses)) + str(np.sum(botMasses)) + "\n" +
-                  "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+                  "Collector #" + str(processNum) + " had an episode mean mass of " + str(int(np.mean(botMasses))))
+            if __debug__:
+                  print(str(np.shape(botMasses)) + " in botMasses shape. Sum of masses: "+ str(np.sum(botMasses)))
+            print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
             model.resetModel()
             step = 0
 
 
-def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, events, weight_manager):
+def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, events,
+                              weight_manager, guiEnabled, spectate):
     startTime = time.time()
     print("*********************************************************************")
     print("Initializing collectors...")
@@ -759,9 +752,9 @@ def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, 
         print("Number of concurrent games must be a positive integer.")
         quit()
     collectors = []
-    for processNum in range(numWorkers):
-        p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder,
-                                                       loadModel, path, events, weight_manager))
+    for processNum in range(1, numWorkers+1):
+        p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder, loadModel,
+                                                       path, events, weight_manager, guiEnabled, spectate))
         p.start()
         collectors.append(p)
     print("Collectors initialized.")
@@ -855,10 +848,11 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         print("Collection time elapsed:      " + str.format('{0:.3f}', time.time() - collectionTime) + "s")
     print("\nBeggining to train...")
     print("////////////////////////////////////////////////////////////////////\n")
+
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    printSteps = 1000
+    printSteps = 100
     timeStep = time.time()
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
@@ -869,7 +863,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             print("____________________________________________________________________\n" +
                   "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
                   "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
-                  "Total steps remaining:                      " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
+                  "Steps performed:                            " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
                   "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
                   str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)")
             if parameters.EXP_REPLAY_ENABLED:
@@ -930,7 +924,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 # subprocesses collect experiences. After a given amount of training steps, collector subprocesses are killed and
 # re-initialized with a more up-to-date version of the network.
 # Every a certain amount of training, testing is done. This also happens with the training status being printed.
-def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime):
+def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime, guiEnabled, spectate):
     # Perform simultaneous experience collection and training
     currentPart = parameters.CURRENT_STEP
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
@@ -944,8 +938,13 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         # Create collectors and exp queue
         experience_queue = mp.Queue()
         collector_events = {"proceed": mp.Event()}
+        for i in range(1,NUM_COLLECTORS+1):
+            collector_events[i] = mp.Event()
         weight_manager = mp.Manager().list()
-        collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, collector_events, weight_manager)
+        collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path,
+                                               collector_events, weight_manager, guiEnabled, spectate)
+        for i in range(1,NUM_COLLECTORS+1):
+            collector_events[i].wait()
         # Create training process and communication pipe
         trainer_master_queue = mp.Queue()
         # TODO: Create multiple learners
@@ -1001,10 +1000,6 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
 def run():
     guiEnabled = int(input("Enable GUI?: (1 == yes)\n"))
     guiEnabled = (guiEnabled == 1)
-    viewEnabled = False
-    if guiEnabled:
-        viewEnabled = int(input("Display view?: (1 == yes)\n"))
-        viewEnabled = (viewEnabled == 1)
 
     tweakedTotal = []
     modelName = None
@@ -1095,54 +1090,54 @@ def run():
 
     # Determine number of humans
     numberOfHumans = 0
-    if guiEnabled and viewEnabled:
+    if guiEnabled:
         numberOfHumans = int(input("Please enter the number of human players: (" + str(MAXHUMANPLAYERS) + " max)\n"))
-
-    if guiEnabled and viewEnabled and not numberOfHumans > 0:
+    spectate = None
+    if guiEnabled and not numberOfHumans > 0:
         spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
 
-
-    startTime = time.time()
     if numberOfHumans == 0:
+        startTime = time.time()
         if parameters.ENABLE_TRAINING:
-            trainingProcedure(parameters, model_in_subfolder, loadModel, modelPath, startTime)
-    if parameters.ENABLE_TRAINING:
+            trainingProcedure(parameters, model_in_subfolder, loadModel, modelPath, startTime, guiEnabled, spectate)
+
+        if parameters.ENABLE_TRAINING:
+            print("--------")
+            print("Training time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
+            print("Average time per update:    " +
+                  str.format('{0:.3f}', (time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
+            print("--------")
+        if parameters.ENABLE_TESTING:
+            testStartTime = time.time()
+            # Post train testing
+            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+            print("Performing post-training tests...\n")
+            runFinalTests(modelPath, parameters)
+            print("\nFinal tests completed.\n")
+            # During train testing
+            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+            print("Performing during training tests...")
+            testResults = []
+            smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+            for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
+                testName = str(testPercent) + "%"
+                testStepNumber = testPercent * smallPart
+                testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
+                testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                    parameters.DUR_TRAIN_TEST_NUM)[0])
+            exportTestResults(testResults, modelPath, parameters)
+            print("\nDuring training tests completed.")
+            print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
+            modelPath = finalPathName(parameters, modelPath)
+            print("--------")
+            print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
+            print("--------")
+        if model_in_subfolder:
+            print(os.path.join(modelPath))
+            createCombinedModelGraphs(os.path.join(modelPath))
         print("--------")
-        print("Training time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
-        print("Average time per update:    " +
-              str.format('{0:.3f}', (time.time() - startTime) / parameters.MAX_TRAINING_STEPS) + " seconds")
+        print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
         print("--------")
-    if parameters.ENABLE_TESTING:
-        testStartTime = time.time()
-        # Post train testing
-        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-        print("Performing post-training tests...\n")
-        runFinalTests(modelPath, parameters)
-        print("\nFinal tests completed.\n")
-        # During train testing
-        print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-        print("Performing during training tests...")
-        testResults = []
-        smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
-        for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
-            testName = str(testPercent) + "%"
-            testStepNumber = testPercent * smallPart
-            testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
-            testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
-                                                parameters.DUR_TRAIN_TEST_NUM)[0])
-        exportTestResults(testResults, modelPath, parameters)
-        print("\nDuring training tests completed.")
-        print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
-        modelPath = finalPathName(parameters, modelPath)
-        print("--------")
-        print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
-        print("--------")
-    if model_in_subfolder:
-        print(os.path.join(modelPath))
-        createCombinedModelGraphs(os.path.join(modelPath))
-    print("--------")
-    print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
-    print("--------")
 
 
 if __name__ == '__main__':

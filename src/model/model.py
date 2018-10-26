@@ -270,6 +270,9 @@ class Model(object):
         return self.virusEnabled
 
     # MVC related method
+    def set_GUI(self, value):
+        self.guiEnabled = value
+
     def register_listener(self, listener):
         self.listeners.append(listener)
 
