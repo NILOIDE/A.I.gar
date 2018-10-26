@@ -1,4 +1,4 @@
-ALGORITHM = "Q-learning"
+ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
 
 Default = False
 VERY_DEBUG = False
@@ -35,6 +35,8 @@ TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to 
 TRAINING_PHASE_LEN = 1 #TRAINING_WAIT_TIME / (FRAME_SKIP_RATE + 1) if TRAINING_WAIT_TIME >= FRAME_SKIP_RATE + 1 else 1
 ENABLE_SPLIT = False
 ENABLE_EJECT = False
+# Q-Learning
+ENABLE_QV = False # Enable discrete QV Learning instead of Q Learning
 OPTIMIZER = "Adam" #SGD has much worse performance
 NESTEROV = 0
 AMSGRAD = False
@@ -118,8 +120,8 @@ Q_WEIGHT_DECAY    = 0#0.001 #0.001 L2 weight decay parameter. Set to 0 to disabl
 
 
 # Actor-critic:
-ACTOR_IS = False
-AC_ACTOR_TDE = 0 # set to False to disable
+ACTOR_IS = False # Enable importance sampling of priotized exp replay also for the actor
+AC_ACTOR_TDE = 0 # How much to use the TDE of the Actor to prioritize experience in the replay buffer
 AC_DELAY_ACTOR_TRAINING = 0
 AC_ACTOR_TRAINING_START = AC_DELAY_ACTOR_TRAINING * MAX_TRAINING_STEPS
 AC_NOISE_AT_HALF = 0.03
