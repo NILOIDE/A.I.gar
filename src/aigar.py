@@ -863,14 +863,13 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             print("____________________________________________________________________\n" +
                   "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
                   "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
-                  "Steps performed:                            " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n"
-                  "Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) + "s   (" +
-                  str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)")
+                  "Steps performed:                            " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS))
             if parameters.EXP_REPLAY_ENABLED:
-                print("Current replay buffer size:                " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY) + "\n")
-            print("¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
+                print("Current replay buffer size:                 " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
+            print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) +
+                  "s   (" + str.format('{0:.3f}', elapsedTime*1000/printSteps) + "ms/step)\n" +
+                  "¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨")
             timeStep = time.time()
-
         # Train 1 step
         batch = []
 
