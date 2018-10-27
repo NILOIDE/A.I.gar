@@ -678,6 +678,8 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     model.initialize()
     step = 0
 
+    controller = None
+    view = None
     # if parameters.ENABLE_TRAINING:
     if processInGUISet:
         if guiEnabled:
@@ -688,16 +690,14 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
             view.draw()
 
     # Move collector to it's required step progression (to break correlations between game stage across collectors)
-    if __debug__:
-        print("Desynchronizing worker #" + str(processNum) + "...")
+    print("Desynchronizing worker #" + str(processNum) + "...")
     for i in range((processNum-1) * int(parameters.RESET_LIMIT / parameters.NUM_COLLECTORS)):
         if guiEnabled and processInGUISet:
             guiEnabled = process_controller_input(controller, view, model)
         model.update()
         step += 1
     model.resetBots()
-    if __debug__:
-        print("Finished desynchronizing worker #" + str(processNum) + ".")
+    print("Finished desynchronizing worker #" + str(processNum) + ".")
     events[processNum].set()
     events["proceed"].wait()
 
@@ -832,7 +832,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Collect enough experiences before training
         print("\n******************************************************************")
-        print("Beginning initial experience collection...\n")
+        print("Beginning initial experience collection...")
         collectionTime = time.time()
         while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
             for experience in experience_queue.get():
@@ -852,7 +852,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    printSteps = 100
+    printSteps = 1000
     timeStep = time.time()
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
@@ -873,11 +873,16 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Train 1 step
         batch = []
+
         while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
             batch.append(experience_queue.get())
+
+        # Signal collectors to collect another set of experiences
+        if parameters.ONE_BEHIND_TRAINING:
+            collector_events["proceed"].set()
+
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
-        # print(np.shape(batch))
         if parameters.EXP_REPLAY_ENABLED:
             for experience in batch:
                 expReplayer.add(*(experience[0]))
@@ -892,8 +897,9 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
             print("Trainer saved weights hash: " + m.hexdigest())
 
-        # Let collectors begin collecting
-        collector_events["proceed"].set()
+        # Signal collectors to collect another set of experiences
+        if not parameters.ONE_BEHIND_TRAINING:
+            collector_events["proceed"].set()
 
         if (step+1) % testInterval == 0:
             if __debug__:
@@ -933,7 +939,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     if num_cores > 1:
         os.sched_setaffinity(0, {num_cores-1})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
-        trainer_timeStart = time.time()
+        trainer_lastSignal = time.time()
         killTrainer = False
         # Create collectors and exp queue
         experience_queue = mp.Queue()
@@ -961,7 +967,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
             # While trainer has sent no signal, check if trainer should be terminated
             while trainer_master_queue.empty():
                 sleep(1)
-                if time.time() - trainer_timeStart > 30*60: #Time elapsed is over 30 mins
+                if time.time() - trainer_lastSignal > 30*60: #Time elapsed is over 30 mins
                     killTrainer = True
                     break
             if killTrainer:
@@ -981,6 +987,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                 if __debug__:
                     print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
                 currentPart = printTrainProgress(parameters, currentPart, startTime)
+                trainer_lastSignal = time.time()
             # When trainer signals training is 'DONE', terminate child processes (collectors and trainer) and break
             if trainer_signal == "DONE":
                 if __debug__:
