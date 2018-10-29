@@ -331,7 +331,7 @@ class Network(object):
             self.actionNetwork.compile(loss='mse', optimizer=optimizer)
 
         # if __debug__:
-        #     print(self.valueNetwork.summary())
+        print(self.valueNetwork.summary())
         #     print("\n")
 
         if modelName is not None:

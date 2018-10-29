@@ -661,10 +661,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     del SPEC_OS
     num_cores = mp.cpu_count()
     if num_cores > 1:
-        if num_cores >= parameters.NUM_COLLECTORS+1:
-            os.sched_setaffinity(0, {processNum})  # Core #1 is reserved for trainer process
-        else:
-            os.sched_setaffinity(0, range(1,num_cores)) # Core #1 is reserved for trainer process
+        os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
 
@@ -725,6 +722,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
                 print("Quitting...")
                 quit()
             experience_queue.put(experienceList)
+        events[processNum].set()
         if __debug__:
             print("Collector #" + str(processNum) + " is waiting.")
         events["Col_can_proceed"].wait()
@@ -889,6 +887,9 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Signal collectors to collect another set of experiences
         if parameters.ONE_BEHIND_TRAINING:
+            for i in range(1, NUM_COLLECTORS + 1):
+                collector_events[i].wait()
+                collector_events[i].clear()
             collector_events["Col_can_proceed"].set()
 
         if __debug__:
@@ -910,13 +911,16 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Signal collectors to collect another set of experiences
         if not parameters.ONE_BEHIND_TRAINING:
+            for i in range(1, NUM_COLLECTORS + 1):
+                collector_events[i].wait()
+                collector_events[i].clear()
             collector_events["Col_can_proceed"].set()
 
         if (step+1) % testInterval == 0:
             if __debug__:
                 print("Copying network to new file '" + str(parameters.CURRENT_STEP + testInterval) + "_model.h5 ...")
             learningAlg.save(path)
-            learningAlg.save(path, str(parameters.CURRENT_STEP + testInterval) + "_")
+            learningAlg.save(path, str(step + 1) + "_")
             params = learningAlg.getUpdatedParams()
             tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
             tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
@@ -960,8 +964,9 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         weight_manager = mp.Manager().list()
         collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path,
                                                collector_events, weight_manager, guiEnabled, spectate)
-        for i in range(1,NUM_COLLECTORS+1):
+        for i in range(1, NUM_COLLECTORS + 1):
             collector_events[i].wait()
+            collector_events[i].clear()
         # Create training process and communication pipe
         trainer_master_queue = mp.Queue()
         # TODO: Create multiple learners
@@ -978,7 +983,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
             # While trainer has sent no signal, check if trainer should be terminated
             while trainer_master_queue.empty():
                 sleep(1)
-                if time.time() - trainer_lastSignal > 30*60: #Time elapsed is over 30 mins
+                if time.time() - trainer_lastSignal > smallPart*0.25: #Time elapsed is over the required time of 0.25s/step
                     killTrainer = True
                     break
             if killTrainer:
