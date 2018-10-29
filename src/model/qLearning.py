@@ -184,7 +184,7 @@ class QLearn(object):
         return idxs, priorities
 
     def learn(self, batch, step):
-        idxs, priorities =  self.train(batch)
+        idxs, priorities = self.train(batch)
         self.updateNoise()
         if (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.updateNetworks()

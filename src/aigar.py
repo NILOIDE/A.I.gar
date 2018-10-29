@@ -661,7 +661,10 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     del SPEC_OS
     num_cores = mp.cpu_count()
     if num_cores > 1:
-        os.sched_setaffinity(0, {processNum}) # Core #1 is reserved for trainer process
+        if num_cores >= parameters.NUM_COLLECTORS+1:
+            os.sched_setaffinity(0, {processNum})  # Core #1 is reserved for trainer process
+        else:
+            os.sched_setaffinity(0, range(1,num_cores)) # Core #1 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
 
@@ -699,7 +702,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     model.resetBots()
     print("Finished desynchronizing worker #" + str(processNum) + ".")
     events[processNum].set()
-    events["proceed"].wait()
+    events["Col_can_proceed"].wait()
 
     # Run game until terminated
     while True:
@@ -709,7 +712,9 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
             model.update()
             step += 1
         # After a bot has 'n' amount of experiences, send them to trainer.
-        all_experienceLists = [bot.getExperiences() for bot in model.getBots()]
+        all_experienceLists = [bot.getExperiences() for bot in model.getNNBots()]
+        model.resetBots()
+        events["Col_can_proceed"].clear()
         if __debug__:
             shape = np.shape(all_experienceLists)
             print("Collector #" + str(processNum) + " is adding to experience queue " +
@@ -720,17 +725,19 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
                 print("Quitting...")
                 quit()
             experience_queue.put(experienceList)
-        model.resetBots()
-        events["proceed"].clear()
-        events["proceed"].wait()
-        for bot in model.getBots():
+        if __debug__:
+            print("Collector #" + str(processNum) + " is waiting.")
+        events["Col_can_proceed"].wait()
+        if __debug__:
+            print("Collector #" + str(processNum) + " continued.")
+        for bot in model.getNNBots():
             bot.getLearningAlg().setValueNetWeights(weight_manager[0])
             if __debug__ and parameters.VERY_DEBUG:
                 m = hashlib.md5(str(bot.getLearningAlg().getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
                 print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if step > parameters.RESET_LIMIT-parameters.FRAME_SKIP_RATE+2:
             botMasses = []
-            for bot in model.getBots():
+            for bot in model.getNNBots():
                 botMasses.append(bot.getMassOverTime())
                 bot.resetMassList()
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
@@ -821,7 +828,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     if __debug__ and parameters.VERY_DEBUG:
         m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
         print("Trainer saved weights hash: " + m.hexdigest())
-    collector_events["proceed"].set()
+    collector_events["Col_can_proceed"].set()
     if EXP_REPLAY_ENABLED:
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
             expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
@@ -836,7 +843,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         collectionTime = time.time()
         while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
             for experience in experience_queue.get():
-                collector_events["proceed"].set()
+                collector_events["Col_can_proceed"].set()
                 expReplayer.add(*experience)
             if __debug__:
                 print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
@@ -852,7 +859,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     testInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
-    printSteps = 1000
+    printSteps = 500
     timeStep = time.time()
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
@@ -863,7 +870,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             print("____________________________________________________________________\n" +
                   "Steps before next test copy:                " + str(test_stepsLeft) + " | Total: " + str(testInterval) + "\n" +
                   "Steps before target network update:         " + str(targNet_stepsLeft) + " | Total: " + str(targNet_stepChunk) + "\n" +
-                  "Steps performed:                            " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS))
+                  "Steps performed:                            " + str(step) + " | Total: " + str(parameters.MAX_TRAINING_STEPS) + "\n" +
+                  "Current exploration:                        " + str(learningAlg.getNoise()))
             if parameters.EXP_REPLAY_ENABLED:
                 print("Current replay buffer size:                 " + str(len(expReplayer)) + " | Total: " + str(parameters.MEMORY_CAPACITY))
             print("Time elapsed during last " + str(printSteps) + " train steps:  " + str.format('{0:.3f}', elapsedTime) +
@@ -872,16 +880,20 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             timeStep = time.time()
         # Train 1 step
         batch = []
-
+        # while experience_queue.qsize() < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
+        #     pass
+        #
+        # print(experience_queue.qsize())
         while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
             batch.append(experience_queue.get())
 
         # Signal collectors to collect another set of experiences
         if parameters.ONE_BEHIND_TRAINING:
-            collector_events["proceed"].set()
+            collector_events["Col_can_proceed"].set()
 
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
+
         if parameters.EXP_REPLAY_ENABLED:
             for experience in batch:
                 expReplayer.add(*(experience[0]))
@@ -898,7 +910,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Signal collectors to collect another set of experiences
         if not parameters.ONE_BEHIND_TRAINING:
-            collector_events["proceed"].set()
+            collector_events["Col_can_proceed"].set()
 
         if (step+1) % testInterval == 0:
             if __debug__:
@@ -942,7 +954,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         killTrainer = False
         # Create collectors and exp queue
         experience_queue = mp.Queue()
-        collector_events = {"proceed": mp.Event()}
+        collector_events = {"Col_can_proceed": mp.Event()}
         for i in range(1,NUM_COLLECTORS+1):
             collector_events[i] = mp.Event()
         weight_manager = mp.Manager().list()

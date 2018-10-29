@@ -209,7 +209,7 @@ class Model(object):
                 return bot
 
     def getNNBots(self):
-        return [bot for bot in self.bots if bot.getType == "NN"]
+        return [bot for bot in self.bots if bot.getType() == "NN"]
 
     def getTopTenPlayers(self):
         players = self.getPlayers()[:]
