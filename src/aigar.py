@@ -841,16 +841,19 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         collectionTime = time.time()
         while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
             for experience in experience_queue.get():
+                for i in range(1, parameters.NUM_COLLECTORS + 1):
+                    collector_events[i].wait()
+                    collector_events[i].clear()
                 collector_events["Col_can_proceed"].set()
                 expReplayer.add(*experience)
             if __debug__:
                 print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
-        print("\n******************************************************************")
         # TODO: Start with buffer completely full?
         # TODO: can experiences be added in batch in Prioritized Replay Buffer?
         print("Initial experience collection completed.")
         print("Current replay buffer size:   ", len(expReplayer))
         print("Collection time elapsed:      " + str.format('{0:.3f}', time.time() - collectionTime) + "s")
+        print("\n******************************************************************")
     print("\nBeggining to train...")
     print("////////////////////////////////////////////////////////////////////\n")
 
@@ -887,7 +890,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Signal collectors to collect another set of experiences
         if parameters.ONE_BEHIND_TRAINING:
-            for i in range(1, NUM_COLLECTORS + 1):
+            for i in range(1, parameters.NUM_COLLECTORS + 1):
                 collector_events[i].wait()
                 collector_events[i].clear()
             collector_events["Col_can_proceed"].set()
@@ -911,7 +914,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
 
         # Signal collectors to collect another set of experiences
         if not parameters.ONE_BEHIND_TRAINING:
-            for i in range(1, NUM_COLLECTORS + 1):
+            for i in range(1, parameters.NUM_COLLECTORS + 1):
                 collector_events[i].wait()
                 collector_events[i].clear()
             collector_events["Col_can_proceed"].set()
@@ -959,7 +962,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         # Create collectors and exp queue
         experience_queue = mp.Queue()
         collector_events = {"Col_can_proceed": mp.Event()}
-        for i in range(1,NUM_COLLECTORS+1):
+        for i in range(1,parameters.NUM_COLLECTORS+1):
             collector_events[i] = mp.Event()
         weight_manager = mp.Manager().list()
         collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path,
@@ -983,19 +986,6 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
             # While trainer has sent no signal, check if trainer should be terminated
             while trainer_master_queue.empty():
                 sleep(1)
-                if time.time() - trainer_lastSignal > smallPart*0.25: #Time elapsed is over the required time of 0.25s/step
-                    killTrainer = True
-                    break
-            if killTrainer:
-                print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
-                      "Trainer time limit reach. Killing and restarting trainer..." + "\n" +
-                      "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
-                trainer.terminate()
-                trainer.join(timeout=0.001)
-                terminateExperienceCollectors(collectors)
-                # In the case trainer was early terminated, this assignment will cause progress to revert to previous training interval
-                currentPart = currentPart - (currentPart % trainInterval)
-                break
             # Get a signal from trainer
             trainer_signal = trainer_master_queue.get()
             # Print when 1% of training time has elapsed
