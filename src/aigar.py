@@ -926,7 +926,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             learningAlg.save(path, str(step + 1) + "_")
             params = learningAlg.getUpdatedParams()
             tweakedTotal = [[paramName, params[paramName], checkValidParameter(paramName)] for paramName in params]
-            tweakedTotal.append(["CURRENT_STEP", parameters.CURRENT_STEP + testInterval, checkValidParameter("CURRENT_STEP")])
+            tweakedTotal.append(["CURRENT_STEP", step+1, checkValidParameter("CURRENT_STEP")])
             modifyParameterValue(tweakedTotal, path)
         # Check if we should print the training progress percentage
         if (step+1) % smallPart == 0:
