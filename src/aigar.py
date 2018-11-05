@@ -911,6 +911,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
 
+        #TODO: Does AC have target netowrks?
         if parameters.EXP_REPLAY_ENABLED:
             for experience in batch:
                 expReplayer.add(*(experience[0]))

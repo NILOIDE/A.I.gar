@@ -654,6 +654,7 @@ class ActorCritic(object):
                 if steps > self.parameters.AC_ACTOR_TRAINING_START:
                     priorities = self.train_actor_batch(batch, priorities, off_policy_weights)
         self.latestTDerror = numpy.mean(priorities)
+        #TODO: is noise being updated correctly?
         self.updateNoise()
 
         return idxs, priorities, updated_actions
@@ -842,7 +843,7 @@ class ActorCritic(object):
                     if noisy_eval > action_eval:
                         action = noisyAction
                         action_eval = noisy_eval
-
+        self.updateNoise()
         noisyAction = self.applyNoise(action)
 
         if __debug__ and bot.player.getSelected():
@@ -981,10 +982,10 @@ class ActorCritic(object):
         self.actor.save(path, name)
         self.critic.save(path, name)
 
-
     def setNoise(self, val):
         self.std = val
 
+    #TODO: What is temperature?
     def setTemperature(self, val):
         self.temperature = val
 
@@ -1021,7 +1022,7 @@ class ActorCritic(object):
         params = {}
         params["GAUSSIAN_NOISE"] = self.std
         params["OCACLA_NOISE"] = self.ocacla_noise
-        params["TEMPERATURE"] = self.temperature
+        # params["TEMPERATURE"] = self.temperature
         if self.parameters.END_DISCOUNT:
             params["DISCOUNT"] = self.discount
         return params
