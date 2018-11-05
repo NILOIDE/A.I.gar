@@ -1,4 +1,4 @@
-ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
+ALGORITHM = "CACLA" # "Q-learning" or "CACLA" so far
 
 Default = False
 VERY_DEBUG = False
@@ -157,8 +157,10 @@ OCACLA_ONLINE_SAMPLES        = 0
 OCACLA_ONLINE_SAMPLING_NOISE = 0
 OCACLA_MOVING_GAUSSIAN       = True
 OCACLA_REPLACE_TRANSITIONS   = False
+OCACLA_START_NOISE           = 1.0
+OCACLA_NOISE                 = OCACLA_START_NOISE
 OCACLA_END_NOISE             = 0.0004
-OCACLA_NOISE_DECAY           = OCACLA_END_NOISE ** (1 / MAX_TRAINING_STEPS) if MAX_TRAINING_STEPS != 0 else 0
+OCACLA_NOISE_DECAY           = OCACLA_END_NOISE ** (OCACLA_START_NOISE / MAX_TRAINING_STEPS) if MAX_TRAINING_STEPS != 0 else 0
 
 # Deterministic Policy Gradient (DPG):
 DPG_TAU                    = 0.001 # How quickly the weights of the target networks are updated

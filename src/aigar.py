@@ -355,10 +355,21 @@ def printTrainProgress(parameters, currentPart, startTime):
     return currentPart
 
 def createNetwork(parameters, path):
-    network = Network(parameters)
-    network.saveModel(path)
+    if not os.path.exists(path + "models/"):
+        os.mkdir(path + "models/")
+    algorithm = parameters.ALGORITHM
+    learningAlg = None
+    if algorithm == "Q-learning":
+        learningAlg = QLearn(parameters)
+    elif algorithm == "CACLA":
+        learningAlg = ActorCritic(parameters)
+    else:
+        print("Wrong algorithm name in parameters.")
+        quit()
+    learningAlg.createNetwork()
+    learningAlg.save(path)
     if parameters.ENABLE_TRAINING:
-        network.saveModel(path, "0_")
+        learningAlg.save(path, "0_")
 
 
 def createHumans(numberOfHumans, model1):
@@ -666,7 +677,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     p.nice(0)
 
     # Create game instance
-    networkLoadPath = modelPath + "models/model.h5"
+    networkLoadPath = modelPath + "models/"
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     processInGUISet = processNum in parameters.GUI_COLLECTOR_SET
@@ -729,10 +740,11 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
         if __debug__:
             print("Collector #" + str(processNum) + " continued.")
         for bot in model.getNNBots():
-            bot.getLearningAlg().setValueNetWeights(weight_manager[0])
+            bot.getLearningAlg().setNetworkWeights(weight_manager[0])
             if __debug__ and parameters.VERY_DEBUG:
-                m = hashlib.md5(str(bot.getLearningAlg().getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
-                print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
+                for weight in bot.getLearningAlg().getNetworkWeights():
+                    m = hashlib.md5(str(bot.getLearningAlg().getNetworkWeights()[weight]).encode('utf-8'))
+                    print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if step > parameters.RESET_LIMIT-parameters.FRAME_SKIP_RATE+2:
             botMasses = []
             for bot in model.getNNBots():
@@ -820,12 +832,13 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
-    networkPath = path + "models/model.h5"
+    networkPath = path + "models/"
     learningAlg = createLearner(parameters, networkPath)
-    weight_manager.append(learningAlg.getNetwork().getValueNetwork().get_weights())
+    weight_manager.append(learningAlg.getNetworkWeights())
     if __debug__ and parameters.VERY_DEBUG:
-        m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
-        print("Trainer saved weights hash: " + m.hexdigest())
+        for weight in learningAlg.getNetworkWeights():
+            m = hashlib.md5(str(learningAlg.getNetworkWeights()[weight]).encode('utf-8'))
+            print("Trainer saved weights hash: " + m.hexdigest())
     collector_events["Col_can_proceed"].set()
     if EXP_REPLAY_ENABLED:
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
@@ -907,10 +920,11 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             batch = (tr_batch[0,0,:], tr_batch[1,0,:], tr_batch[2,0,:], tr_batch[3,0,:], tr_batch[4,0,:])
             _,_,_ = learningAlg.learn(batch, step)
 
-        weight_manager[0] = learningAlg.getNetwork().getValueNetwork().get_weights()
+        weight_manager[0] = learningAlg.getNetworkWeights()
         if __debug__ and parameters.VERY_DEBUG:
-            m = hashlib.md5(str(learningAlg.getNetwork().getValueNetwork().get_weights()).encode('utf-8'))
-            print("Trainer saved weights hash: " + m.hexdigest())
+            for weight in learningAlg.getNetworkWeights():
+                m = hashlib.md5(str(learningAlg.getNetworkWeights()[weight]).encode('utf-8'))
+                print("Trainer saved weights hash: " + m.hexdigest())
 
         # Signal collectors to collect another set of experiences
         if not parameters.ONE_BEHIND_TRAINING:

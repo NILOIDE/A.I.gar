@@ -71,6 +71,9 @@ class QLearn(object):
         self.temperature = parameters.TEMPERATURE
         self.current_q_values = None
 
+    def createNetwork(self):
+        self.network = Network(self.parameters)
+
     def initializeNetwork(self, loadPath, networks = None):
         if networks is None or networks == {}:
             self.network = Network(self.parameters, loadPath)
@@ -264,11 +267,17 @@ class QLearn(object):
     def setTemperature(self, val):
         self.temperature = val
 
+    def setNetworkWeights(self, weightsDict):
+        self.network.setWeights(weightsDict["Q"])
+
     def getTemperature(self):
         return self.temperature
 
     def getNetwork(self):
         return self.network
+
+    def getNetworkWeights(self):
+        return {"Q": self.network.getValueNetwork().get_weights()}
 
     def getQValues(self):
         return self.qValues

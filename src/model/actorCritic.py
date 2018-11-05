@@ -122,10 +122,12 @@ class ValueNetwork(object):
     def train(self, inputs, targets, importance_weights):
         self.model.train_on_batch(inputs, targets, sample_weight=importance_weights)
 
-
     def save(self, path, name):
         self.target_model.set_weights(self.model.get_weights())
         self.target_model.save(path + name + "value_model.h5")
+
+    def getNetwork(self):
+        return self.model
 
 
 class PolicyNetwork(object):
@@ -254,6 +256,9 @@ class PolicyNetwork(object):
     def save(self, path, name = ""):
         self.model.save(path + name + "actor" + "_model.h5")
 
+    def getNetwork(self):
+        return self.model
+
 
 class ActionValueNetwork(object):
     def __init__(self, parameters, modelName, cnnLayers=None, cnnInput=None):
@@ -381,6 +386,9 @@ class ActionValueNetwork(object):
         self.target_model.set_weights(self.model.get_weights())
         self.target_model.save(path + name + "actionValue_model.h5")
 
+    def getNetwork(self):
+        return self.model
+
 
 class ActorCritic(object):
     def __repr__(self):
@@ -465,6 +473,29 @@ class ActorCritic(object):
         combinedModel.compile(optimizer=optimizer, loss="mse")
         return combinedModel
 
+    def createNetwork(self):
+        networks = {}
+        if self.parameters.CNN_REPR:
+            cnnLayers = self.createCNN()
+        if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+            self.actor = PolicyNetwork(self.parameters, None)
+            self.critic = ActionValueNetwork(self.parameters, None)
+            self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
+            networks["MU(S)"] = self.actor
+            networks["Q(S,A)"] = self.critic
+            networks["Actor-Critic-Combo"] = self.combinedActorCritic
+        else:
+            self.actor = PolicyNetwork(self.parameters, None)
+            networks["MU(S)"] = self.actor
+            if self.parameters.OCACLA_ENABLED:
+                self.critic = ActionValueNetwork(self.parameters, None)
+                networks["Q(S,A)"] = self.critic
+            else:
+                self.critic = ValueNetwork(self.parameters, None)
+                networks["V(S)"] = self.critic
+        self.networks = networks
+
+
     def initializeNetwork(self, loadPath, networks=None):
         if networks is None or networks == {}:
             if networks is None:
@@ -504,6 +535,7 @@ class ActorCritic(object):
                 networks[network].summary()
                 continue
             networks[network].model.summary()
+        self.networks = networks
         return networks
 
     def createCNN(self):
@@ -622,6 +654,8 @@ class ActorCritic(object):
                 if steps > self.parameters.AC_ACTOR_TRAINING_START:
                     priorities = self.train_actor_batch(batch, priorities, off_policy_weights)
         self.latestTDerror = numpy.mean(priorities)
+        self.updateNoise()
+
         return idxs, priorities, updated_actions
 
     def train_actor_DPG(self, batch):
@@ -943,6 +977,7 @@ class ActorCritic(object):
             self.actor.load(path)
 
     def save(self, path, name = ""):
+        path = path + "models/"
         self.actor.save(path, name)
         self.critic.save(path, name)
 
@@ -953,13 +988,22 @@ class ActorCritic(object):
     def setTemperature(self, val):
         self.temperature = val
 
+    def getNetworkWeights(self):
+        weightDict = {}
+        for networkName in self.networks:
+            weightDict[networkName] = self.networks[networkName].getNetwork().get_weights()
+        return weightDict
+
+    def setNetworkWeights(self, weightDict):
+        for weightName in weightDict:
+            self.networks[weightName].getNetwork().set_weights(weightDict[weightName])
+
     def getTemperature(self):
         return None
 
     def reset(self):
         self.latestTDerror = None
         self.ornUhlPrev = numpy.zeros(self.action_len)
-
 
     def resetQValueList(self):
         self.qValues = []
@@ -972,3 +1016,12 @@ class ActorCritic(object):
 
     def getQValues(self):
         return self.qValues
+
+    def getUpdatedParams(self):
+        params = {}
+        params["GAUSSIAN_NOISE"] = self.std
+        params["OCACLA_NOISE"] = self.ocacla_noise
+        params["TEMPERATURE"] = self.temperature
+        if self.parameters.END_DISCOUNT:
+            params["DISCOUNT"] = self.discount
+        return params

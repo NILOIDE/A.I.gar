@@ -79,8 +79,6 @@ class Network(object):
                                                        self.parameters.ENABLE_EJECT)
         self.num_actions = len(self.actions)
 
-        self.loadedModelName = None
-
         self.gpus = self.parameters.NUM_GPUS
 
         # Q-learning
@@ -372,8 +370,7 @@ class Network(object):
         self.targetNetwork.reset_states()
 
     def load(self, modelName):
-        path = modelName
-        self.loadedModelName = modelName
+        path = modelName + "model.h5"
         self.valueNetwork = keras.models.load_model(path)
         self.targetNetwork = load_model(path)
 
@@ -531,9 +528,6 @@ class Network(object):
 
     def getOptimizer(self):
         return self.optimizer
-
-    def getLoadedModelName(self):
-        return self.loadedModelName
 
     def getActions(self):
         return self.actions
