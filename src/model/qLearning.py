@@ -23,48 +23,58 @@ class QLearn(object):
         self.parameters = parameters
         self.latestTDerror = None
         self.qValues = []
-        self.output_len = self.parameters.NUM_ACTIONS * (1 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT)
         self.discount = 0 if parameters.END_DISCOUNT else parameters.DISCOUNT
-        if self.parameters.CNN_REPR:
-            if self.parameters.CNN_P_REPR:
-                if self.parameters.CNN_P_RGB:
-                    channels = 3
-                # GrayScale
-                else:
-                    channels = 1
-                if self.parameters.CNN_LAST_GRID:
-                    channels = channels * 2
-                if self.parameters.COORDCONV:
-                    channels += 2
 
-                if self.parameters.CNN_USE_L1:
-                    self.input_len = (self.parameters.CNN_INPUT_DIM_1,
-                                      self.parameters.CNN_INPUT_DIM_1, channels)
-                elif self.parameters.CNN_USE_L2:
-                    self.input_len = (self.parameters.CNN_INPUT_DIM_2,
-                                      self.parameters.CNN_INPUT_DIM_2, channels)
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.output_len = self.parameters.NUM_ACTIONS * (1 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT)
+            if self.parameters.CNN_REPR:
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+                    if self.parameters.COORDCONV:
+                        channels += 2
+
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = ( self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
                 else:
-                    self.input_len = ( self.parameters.CNN_INPUT_DIM_3,
-                                      self.parameters.CNN_INPUT_DIM_3, channels)
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
+                if self.parameters.EXTRA_INPUT:
+                    self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
+
+            elif self.parameters.USE_ACTION_AS_INPUT:
+                self.input_len = parameters.STATE_REPR_LEN + 4
+                self.output_len = 1
             else:
-                channels = self.parameters.NUM_OF_GRIDS
-                if self.parameters.CNN_USE_L1:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
-                                      self.parameters.CNN_INPUT_DIM_1)
-                elif self.parameters.CNN_USE_L2:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
-                                      self.parameters.CNN_INPUT_DIM_2)
-                else:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
-                                      self.parameters.CNN_INPUT_DIM_3)
-            if self.parameters.EXTRA_INPUT:
-                self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
-
-        elif self.parameters.USE_ACTION_AS_INPUT:
-            self.input_len = parameters.STATE_REPR_LEN + 4
-            self.output_len = 1
+                self.input_len = parameters.STATE_REPR_LEN
         else:
-            self.input_len = parameters.STATE_REPR_LEN
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
+            else:
+                self.input_len = env.observation_space.shape[0]
+            self.output_len = env.action_space.n
 
         self.discrete = True
         self.epsilon = parameters.EPSILON
@@ -207,20 +217,18 @@ class QLearn(object):
     def updateTargetModel(self):
         self.network.updateTargetNetwork()
 
-    def decideExploration(self, bot):
+    def decideExploration(self):
         if self.parameters.EXPLORATION_STRATEGY == "e-Greedy":
             if numpy.random.random(1) < self.epsilon:
                 explore = True
                 newActionIdx = numpy.random.randint(len(self.network.getActions()))
                 self.qValues.append(float("NaN"))
-                if __debug__:
-                    bot.setExploring(True)
                 return explore, newActionIdx
         return False, None
 
-    def decideMove(self, newState, bot):
+    def decideMove(self, newState, updateNoise=True):
         # Take random action with probability 1 - epsilon
-        explore, newActionIdx = self.decideExploration(bot)
+        explore, newActionIdx = self.decideExploration()
         if not explore:
             q_Values = self.network.predict_action(newState)
             self.current_q_values = q_Values
@@ -232,19 +240,18 @@ class QLearn(object):
                 newActionIdx = numpy.argmax(q_Values)
             # Book keeping:
             self.qValues.append(q_Values[newActionIdx])
-            if __debug__:
-                bot.setExploring(False)
         else:
             self.current_q_values = None
 
-        if __debug__  and not explore and bot.player.getSelected():
-            average_value = round(numpy.mean(q_Values), 1)
-            q_value = round(q_Values[newActionIdx], 1)
-            print("Expected Q-value: ", average_value, " Q(s,a) of current action: ", q_value)
-            print("")
+        # if __debug__  and not explore and bot.player.getSelected():
+        #     average_value = round(numpy.mean(q_Values), 1)
+        #     q_value = round(q_Values[newActionIdx], 1)
+        #     print("Expected Q-value: ", average_value, " Q(s,a) of current action: ", q_value)
+        #     print("")
         newAction = self.network.actions[newActionIdx]
 
-        self.updateNoise()
+        if updateNoise:
+            self.updateNoise()
         return newActionIdx, newAction
 
     def save(self, path, name = ""):

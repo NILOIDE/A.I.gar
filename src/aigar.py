@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from builtins import input
 import multiprocessing as mp
 from time import sleep
+import gym
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
@@ -758,6 +759,103 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
             model.resetModel()
             step = 0
 
+def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events,
+                      weight_manager, guiEnabled):
+    SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
+    parameters = importlib.util.module_from_spec(SPEC_OS)
+    SPEC_OS.loader.exec_module(parameters)
+    del SPEC_OS
+    num_cores = mp.cpu_count()
+    if num_cores > 1:
+        os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
+    p = psutil.Process()
+    p.nice(0)
+
+    # Create game instance
+    networkLoadPath = modelPath + "models/"
+    # TODO: Is this function call needed?
+    setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
+    processInGUISet = processNum in parameters.GUI_COLLECTOR_SET
+    env = gym.make('CartPole-v0')
+    learningAlg = None
+    if parameters.ALGORITHM == "Q-learning":
+        learningAlg = QLearn(parameters)
+    elif parameters.ALGORITHM == "CACLA":
+        learningAlg = ActorCritic(parameters)
+    else:
+        print("Please enter a valid algorithm.\n")
+        quit()
+    networks = {}
+    networks = learningAlg.initializeNetwork(networkLoadPath, networks)
+
+    # Move collector forward to decorrelate (to break correlations between game stage across collectors)
+    print("Desynchronizing worker #" + str(processNum) + "...")
+    observation = env.reset()
+    observation = np.array([observation])
+    step = 0
+    for i in range((processNum-1) * 100):
+        if guiEnabled and processInGUISet:
+            env.render()
+        actionIdx, action = learningAlg.decideMove(observation, False)
+        observation, reward, done, info = env.step(actionIdx)
+        observation = np.array([observation])
+        step += 1
+        if done:
+            reward = -1
+            observation = env.reset()
+            observation = np.array([observation])
+            step = 0
+    print("Finished desynchronizing worker #" + str(processNum) + ".")
+    events[processNum].set()
+    events["Col_can_proceed"].wait()
+
+    # Run game until terminated
+    while True:
+        actionIdx, action = learningAlg.decideMove(observation)
+        for _ in range(parameters.FRAME_SKIP_RATE):
+            if guiEnabled and processInGUISet:
+                env.render()
+            new_observation, reward, done, info = env.step(actionIdx)
+            new_observation = np.array([new_observation])
+            step += 1
+            if done:
+                reward = -1
+                break
+        experienceList = [np.array([observation, action, reward, new_observation, None])]
+        # print(experienceList)
+        events["Col_can_proceed"].clear()
+        # After collector has 'n' amount of experiences, send them to trainer.
+        if __debug__:
+            shape = np.shape(experienceList)
+            print("Collector #" + str(processNum) + " is adding to experience queue " +
+                  str(shape[0]) + " lists.")
+
+        if len(experienceList) != 1:
+            print("Collector collected the wrong amount of experiences this step (" + str(len(experienceList)) +")")
+            print("Quitting...")
+            quit()
+        experience_queue.put(experienceList)
+        events[processNum].set()
+        if __debug__:
+            print("Collector #" + str(processNum) + " is waiting.")
+        events["Col_can_proceed"].wait()
+        if __debug__:
+            print("Collector #" + str(processNum) + " continued.")
+        learningAlg.setNetworkWeights(weight_manager[0])
+        if __debug__ and parameters.VERY_DEBUG:
+            for weight in learningAlg.getNetworkWeights():
+                m = hashlib.md5(str(learningAlg.getNetworkWeights()[weight]).encode('utf-8'))
+                print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
+        if done:
+            print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
+                  "Collector #" + str(processNum) + " had an episode mean length of " + str(step))
+            print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+            observation = env.reset()
+            observation = np.array([observation])
+            step = 0
+        else:
+            observation = new_observation
+
 
 def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path, events,
                               weight_manager, guiEnabled, spectate):
@@ -770,8 +868,12 @@ def startExperienceCollectors(parameters, experience_queue, model_in_subfolder, 
         quit()
     collectors = []
     for processNum in range(1, numWorkers+1):
-        p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder, loadModel,
-                                                       path, events, weight_manager, guiEnabled, spectate))
+        if parameters.GAME_NAME == "Agar.io":
+            p = mp.Process(target=performModelSteps, args=(experience_queue, processNum, model_in_subfolder, loadModel,
+                                                           path, events, weight_manager, guiEnabled, spectate))
+        else:
+            p = mp.Process(target=performGymSteps, args=(experience_queue, processNum, model_in_subfolder, loadModel,
+                                                           path, events, weight_manager, guiEnabled))
         p.start()
         collectors.append(p)
     print("Collectors initialized.")
@@ -875,6 +977,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     printSteps = 500
     timeStep = time.time()
+    if parameters.GAME_NAME != "Agar.io":
+        cartPoleTest(learningAlg, path, "start.png")
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
         if step % printSteps == 0:
@@ -894,10 +998,6 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             timeStep = time.time()
         # Train 1 step
         batch = []
-        # while experience_queue.qsize() < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
-        #     pass
-        #
-        # print(experience_queue.qsize())
         while len(batch) < parameters.NUM_COLLECTORS*parameters.NUM_NN_BOTS:
             batch.append(experience_queue.get())
 
@@ -907,7 +1007,6 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                 collector_events[i].wait()
                 collector_events[i].clear()
             collector_events["Col_can_proceed"].set()
-
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
 
@@ -952,6 +1051,54 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     if __debug__:
         print("Trainer sending signal: 'DONE'")
     queue.put("DONE")
+    cartPoleTest(learningAlg, path, "end.png")
+
+
+def cartPoleTest(alg, path, name):
+    x = []
+    y = []
+    z = []
+    for v in range(3*5):
+        y.append(str(float(v/5.0-1.5)))
+        row = []
+        for t in range(30*5):
+            values = alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
+            row.append(values[np.argmax(values)])
+        z.append(numpy.array(row))
+
+    for t in range(3*5):
+        x.append(str(float(3.14/180*t/5 -3.14/180*15)))
+
+    x = np.array(x)
+    y = np.array(y)
+    z = np.array(z)
+    plt.imshow(z, extent=[-0.26,0.26,-3.1,3.1], aspect="auto")
+    plt.xlabel("Angle (rad)")
+    plt.ylabel("Velocity (rad/time)")
+    plt.savefig(name)
+
+# def cartPoleTest(alg, path, name):
+    # x = []
+    # y = []
+    # z = []
+    # for t in range(30*5):
+    #     x.append(str(float(3.14/180*t/5 -3.14/180*15)))
+    #     row = []
+    #     # for v in range(3*5):
+    #     #     values = alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
+    #     #     row.append(values[np.argmax(values)])
+    #     z.append(alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(3.14/180*t/5 -3.14/180*15)*6]])))
+    #
+    # for v in range(30*5):
+    #     y.append(str(float(3.14/180*v/5 -3.14/180*15)*6))
+    #
+    # x = np.array(x)
+    # y = np.array(y)
+    # z = np.array(z)
+    # plt.imshow(z, extent=[-0.26,0.26,-3.1,3.1], aspect="auto")
+    # plt.ylabel("Angle (rad)")
+    # plt.xlabel("Action")
+    # plt.savefig(name)
 
 
 # Create the asynchronous training procedure.
@@ -1015,7 +1162,6 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                     print("Master received signal: 'DONE'")
                 trainer.join(timeout=0.001)
                 terminateExperienceCollectors(collectors)
-                currentPart = printTrainProgress(parameters, currentPart, startTime)
                 break
         print("\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n" +
               "Training period ended.\n" +

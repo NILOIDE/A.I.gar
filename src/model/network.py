@@ -71,39 +71,48 @@ class Network(object):
 
         self.parameters = parameters
 
-        if parameters.SQUARE_ACTIONS:
-            self.actions = createDiscreteActionsSquare(self.parameters.NUM_ACTIONS, self.parameters.ENABLE_SPLIT,
-                                                 self.parameters.ENABLE_EJECT)
-        else:
-            self.actions = createDiscreteActionsCircle(self.parameters.NUM_ACTIONS, self.parameters.ENABLE_SPLIT,
-                                                       self.parameters.ENABLE_EJECT)
-        self.num_actions = len(self.actions)
-
         self.gpus = self.parameters.NUM_GPUS
 
         # Q-learning
         self.discount = self.parameters.DISCOUNT
         self.epsilon = self.parameters.EPSILON
         self.frameSkipRate = self.parameters.FRAME_SKIP_RATE
-        self.gridSquaresPerFov = self.parameters.GRID_SQUARES_PER_FOV
 
-        # CNN
-        if self.parameters.CNN_REPR:
-            # (KernelSize, stride, filterNum)
-            self.kernel_1 = self.parameters.CNN_L1
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.gridSquaresPerFov = self.parameters.GRID_SQUARES_PER_FOV
 
-            self.kernel_2 = self.parameters.CNN_L2
+            # CNN
+            if self.parameters.CNN_REPR:
+                # (KernelSize, stride, filterNum)
+                self.kernel_1 = self.parameters.CNN_L1
+                self.kernel_2 = self.parameters.CNN_L2
+                self.kernel_3 = self.parameters.CNN_L3
 
-            self.kernel_3 = self.parameters.CNN_L3
-
-            if self.parameters.CNN_USE_L1:
-                self.stateReprLen = self.parameters.CNN_INPUT_DIM_1
-            elif self.parameters.CNN_USE_L2:
-                self.stateReprLen = self.parameters.CNN_INPUT_DIM_2
+                if self.parameters.CNN_USE_L1:
+                    self.stateReprLen = self.parameters.CNN_INPUT_DIM_1
+                elif self.parameters.CNN_USE_L2:
+                    self.stateReprLen = self.parameters.CNN_INPUT_DIM_2
+                else:
+                    self.stateReprLen = self.parameters.CNN_INPUT_DIM_3
             else:
-                self.stateReprLen = self.parameters.CNN_INPUT_DIM_3
+                self.stateReprLen = self.parameters.STATE_REPR_LEN
+
+            if parameters.SQUARE_ACTIONS:
+                self.actions = createDiscreteActionsSquare(self.parameters.NUM_ACTIONS, self.parameters.ENABLE_SPLIT,
+                                                           self.parameters.ENABLE_EJECT)
+            else:
+                self.actions = createDiscreteActionsCircle(self.parameters.NUM_ACTIONS, self.parameters.ENABLE_SPLIT,
+                                                           self.parameters.ENABLE_EJECT)
+            self.num_actions = len(self.actions)
         else:
-            self.stateReprLen = self.parameters.STATE_REPR_LEN
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
+            else:
+                self.stateReprLen = env.observation_space.shape[0]
+            self.num_actions = env.action_space.n
+            self.actions = list(range(self.num_actions))
 
         # ANN
         self.learningRate = self.parameters.ALPHA
@@ -391,6 +400,8 @@ class Network(object):
             if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
                 return self.valueNetwork.train_on_batch(inputs, targets, sample_weight=importance_weights)
             else:
+                # print("")
+                # print(targets)
                 return self.valueNetwork.train_on_batch(inputs, targets)
 
     def updateActionNetwork(self):

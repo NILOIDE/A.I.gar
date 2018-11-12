@@ -230,7 +230,7 @@ class Bot(object):
 
             # Move
             if self.player.getIsAlive():
-                extraInfo, new_action = self.learningAlg.decideMove(newState, self)
+                extraInfo, new_action = self.learningAlg.decideMove(newState)
 
                 self.updateValues(extraInfo, new_action, newState)
 
