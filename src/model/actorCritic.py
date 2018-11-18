@@ -15,7 +15,7 @@ class ValueNetwork(object):
         self.parameters = parameters
         self.loadedModelName = None
 
-        self.stateReprLen = self.parameters.STATE_REPR_LEN
+        # self.stateReprLen = self.parameters.STATE_REPR_LEN
         self.learningRate = self.parameters.CACLA_CRITIC_ALPHA
         self.optimizer = self.parameters.OPTIMIZER_POLICY
         self.activationFuncHidden = self.parameters.ACTIVATION_FUNC_HIDDEN
@@ -23,6 +23,16 @@ class ValueNetwork(object):
 
         self.layers = parameters.CACLA_CRITIC_LAYERS
         self.input = None
+        
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
+        else:
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
+            else:
+                self.stateReprLen = env.observation_space.shape[0]
 
         if modelName is not None:
             self.load(modelName)
@@ -135,9 +145,7 @@ class PolicyNetwork(object):
         self.parameters = parameters
         self.loadedModelName = None
 
-        self.stateReprLen = self.parameters.STATE_REPR_LEN
-        self.input = None
-
+        
 
         if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
             self.learningRate = self.parameters.DPG_ACTOR_ALPHA
@@ -149,12 +157,24 @@ class PolicyNetwork(object):
         self.optimizer = self.parameters.OPTIMIZER_POLICY
         self.activationFuncHidden = self.parameters.ACTIVATION_FUNC_HIDDEN_POLICY
 
-
-        self.num_outputs = 2  #x, y, split, eject all continuous between 0 and 1
-        if self.parameters.ENABLE_SPLIT:
-            self.num_outputs += 1
-        if self.parameters.ENABLE_EJECT:
-            self.num_outputs += 1
+        # self.stateReprLen = self.parameters.STATE_REPR_LEN
+        self.input = None
+        
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
+            self.num_outputs = 2  #x, y, split, eject all continuous between 0 and 1
+            if self.parameters.ENABLE_SPLIT:
+                self.num_outputs += 1
+            if self.parameters.ENABLE_EJECT:
+                self.num_outputs += 1
+        else:
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
+            else:
+                self.stateReprLen = env.observation_space.shape[0]
+                self.num_outputs = env.action_space.n
 
         if modelName is not None:
             self.load(modelName)
@@ -404,49 +424,59 @@ class ActorCritic(object):
         self.ocacla_noise = 1
         self.ocacla_noise_decay = self.parameters.OCACLA_NOISE_DECAY
         self.steps = 0
-        self.action_len = 2 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT
-        self.ornUhlPrev = numpy.zeros(self.action_len)
         self.counts = [] # For SPG/CACLA: count how much actor training we do each step
         self.caclaVar = parameters.CACLA_VAR_START
-        self.input_len = parameters.STATE_REPR_LEN
         self.input = None
 
-        # CNN stuff:
-        if self.parameters.CNN_REPR:
-            if self.parameters.CNN_P_REPR:
-                if self.parameters.CNN_P_RGB:
-                    channels = 3
-                # GrayScale
-                else:
-                    channels = 1
-                if self.parameters.CNN_LAST_GRID:
-                    channels = channels * 2
-                if self.parameters.COORDCONV:
-                    channels += 2
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.action_len = 2 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT
+            self.ornUhlPrev = numpy.zeros(self.action_len)
+            self.input_len = parameters.STATE_REPR_LEN
 
-                if self.parameters.CNN_USE_L1:
-                    self.input_len = (self.parameters.CNN_INPUT_DIM_1,
-                                      self.parameters.CNN_INPUT_DIM_1, channels)
-                elif self.parameters.CNN_USE_L2:
-                    self.input_len = (self.parameters.CNN_INPUT_DIM_2,
-                                      self.parameters.CNN_INPUT_DIM_2, channels)
+            # CNN stuff:
+            if self.parameters.CNN_REPR:
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+                    if self.parameters.COORDCONV:
+                        channels += 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
                 else:
-                    self.input_len = (self.parameters.CNN_INPUT_DIM_3,
-                                      self.parameters.CNN_INPUT_DIM_3, channels)
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
+                if self.parameters.EXTRA_INPUT:
+                    self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
+        else:
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
             else:
-                channels = self.parameters.NUM_OF_GRIDS
-                if self.parameters.CNN_USE_L1:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
-                                      self.parameters.CNN_INPUT_DIM_1)
-                elif self.parameters.CNN_USE_L2:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
-                                      self.parameters.CNN_INPUT_DIM_2)
-                else:
-                    self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
-                                      self.parameters.CNN_INPUT_DIM_3)
-            if self.parameters.EXTRA_INPUT:
-                self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
-
+                self.input_len = env.observation_space.shape[0]
+            self.output_len = env.action_space.n
+     
         # Bookkeeping:
         self.latestTDerror = None
         self.qValues = []
@@ -582,20 +612,19 @@ class ActorCritic(object):
         if self.parameters.END_DISCOUNT:
             self.discount = 1 - self.parameters.DISCOUNT_INCREASE_FACTOR * (1 - self.discount)
 
-    def updateCriticNetworks(self, time):
-        if time % self.parameters.TARGET_NETWORK_STEPS == 0:
-            self.critic.update_target_model()
-            self.actor.update_target_model()
+    def updateCriticNetworks(self):
+        self.critic.update_target_model()
+        self.actor.update_target_model()
 
     def softlyUpdateNetworks(self):
         self.actor.softlyUpdateTargetModel()
         self.critic.softlyUpdateTargetModel()
 
-    def updateNetworks(self, time):
+    def updateNetworks(self):
         if self.parameters.SOFT_TARGET_UPDATES:
             self.softlyUpdateNetworks()
         else:
-            self.updateCriticNetworks(time)
+            self.updateCriticNetworks()
 
     def apply_off_policy_corrections_cacla(self, batch):
         batchLen = len(batch[0])
@@ -633,7 +662,7 @@ class ActorCritic(object):
 
         return off_policy_weights
 
-    def learn(self, batch, steps):
+    def learn(self, batch, step):
         updated_actions = None
         if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
             idxs, priorities = self.train_critic_DPG(batch)
@@ -646,16 +675,19 @@ class ActorCritic(object):
         else:
             if self.parameters.OCACLA_ENABLED:
                 idxs, priorities = self.train_critic_DPG(batch, get_evals=True)
-                if steps > self.parameters.AC_ACTOR_TRAINING_START:
+                if step > self.parameters.AC_ACTOR_TRAINING_START:
                     updated_actions = self.train_actor_OCACLA(batch, priorities)
             else:
-                off_policy_weights = self.apply_off_policy_corrections_cacla(batch)
-                idxs, priorities = self.train_critic(batch, off_policy_weights)
-                if steps > self.parameters.AC_ACTOR_TRAINING_START:
-                    priorities = self.train_actor_batch(batch, priorities, off_policy_weights)
+                # off_policy_weights = self.apply_off_policy_corrections_cacla(batch)
+                # idxs, priorities = self.train_critic(batch, off_policy_weights)
+                idxs, priorities = self.train_critic(batch)
+                if step > self.parameters.AC_ACTOR_TRAINING_START:
+                    # priorities = self.train_actor_batch(batch, priorities, off_policy_weights)
+                    priorities = self.train_actor_batch(batch, priorities)
         self.latestTDerror = numpy.mean(priorities)
-        #TODO: is noise being updated correctly?
         self.updateNoise()
+        if (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
+            self.updateNetworks()
 
         return idxs, priorities, updated_actions
 
@@ -827,7 +859,7 @@ class ActorCritic(object):
                 action[idx] += noise
         return numpy.clip(action, 0, 1)
 
-    def decideMove(self, state):
+    def decideMove(self, state, updateNoise=True):
         action = self.actor.predict(state)
 
         if self.parameters.OCACLA_ONLINE_SAMPLES:
@@ -843,7 +875,8 @@ class ActorCritic(object):
                     if noisy_eval > action_eval:
                         action = noisyAction
                         action_eval = noisy_eval
-        self.updateNoise()
+        if updateNoise:
+            self.updateNoise()
         noisyAction = self.applyNoise(action)
 
         # if __debug__ and bot.player.getSelected():
@@ -913,7 +946,7 @@ class ActorCritic(object):
         return idxs, priorities
 
 
-    def train_critic(self, batch, off_policy_weights):
+    def train_critic(self, batch, off_policy_weights=None):
         batch_len = len(batch[0])
 
         if self.parameters.CNN_REPR:
@@ -929,7 +962,7 @@ class ActorCritic(object):
         # Calculate input and target for critic
         idxs = batch[6] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else None
         importance_weights = batch[5] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else numpy.ones(batch_len)
-        importance_weights *= off_policy_weights
+        # importance_weights *= off_policy_weights
         priorities = numpy.zeros_like(importance_weights)
 
         for sample_idx in range(batch_len):
@@ -1026,3 +1059,6 @@ class ActorCritic(object):
         if self.parameters.END_DISCOUNT:
             params["DISCOUNT"] = self.discount
         return params
+    
+    def getNetworks(self):
+        return self.networks

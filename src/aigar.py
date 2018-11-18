@@ -776,7 +776,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     # TODO: Is this function call needed?
     setSeedAccordingToFolderNumber(model_in_subfolder, loadModel, modelPath, False)
     processInGUISet = processNum in parameters.GUI_COLLECTOR_SET
-    env = gym.make('CartPole-v0')
+    env = gym.make(parameters.GAME_NAME)
     learningAlg = None
     if parameters.ALGORITHM == "Q-learning":
         learningAlg = QLearn(parameters)
@@ -797,6 +797,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         if guiEnabled and processInGUISet:
             env.render()
         actionIdx, action = learningAlg.decideMove(observation, False)
+        if parameters.ALGORITHM == "CACLA":
+            actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
         observation = np.array([observation])
         step += 1
@@ -812,6 +814,9 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     # Run game until terminated
     while True:
         actionIdx, action = learningAlg.decideMove(observation)
+        actionIdx, action = learningAlg.decideMove(observation)
+        if parameters.ALGORITHM == "CACLA":
+            actionIdx = np.argmax(action)
         for _ in range(parameters.FRAME_SKIP_RATE):
             if guiEnabled and processInGUISet:
                 env.render()
@@ -978,7 +983,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     printSteps = 500
     timeStep = time.time()
     if parameters.GAME_NAME != "Agar.io":
-        cartPoleTest(learningAlg, path, "start.png")
+        cartPoleTest(learningAlg, path, "start.png", parameters)
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
         if step % printSteps == 0:
@@ -1054,7 +1059,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     cartPoleTest(learningAlg, path, "end.png")
 
 
-def cartPoleTest(alg, path, name):
+def cartPoleTest(alg, path, name, parameters):
     x = []
     y = []
     z = []
@@ -1062,8 +1067,18 @@ def cartPoleTest(alg, path, name):
         y.append(str(float(v/5.0-1.5)))
         row = []
         for t in range(30*5):
-            values = alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
-            row.append(values[np.argmax(values)])
+            if parameters.ALGORITHM == "Q-learning":
+                network = alg.getNetwork()
+                values = network.predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
+                row.append(values[np.argmax(values)])
+
+            elif parameters.ALGORITHM == "CACLA":
+                network = alg.getNetworks()["V(S)"]
+                value = network.predict(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
+                row.append(value)
+            else:
+                print("You w0t m8?")
+                quit()
         z.append(numpy.array(row))
 
     for t in range(3*5):
