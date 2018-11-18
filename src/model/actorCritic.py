@@ -827,7 +827,7 @@ class ActorCritic(object):
                 action[idx] += noise
         return numpy.clip(action, 0, 1)
 
-    def decideMove(self, state, bot):
+    def decideMove(self, state):
         action = self.actor.predict(state)
 
         if self.parameters.OCACLA_ONLINE_SAMPLES:
@@ -846,13 +846,13 @@ class ActorCritic(object):
         self.updateNoise()
         noisyAction = self.applyNoise(action)
 
-        if __debug__ and bot.player.getSelected():
-            print("")
-            if self.parameters.ACTOR_CRITIC_TYPE == "DPG" and self.getNoise() != 0:
-                print("Evaluation of current state-action Q(s,a): ", round(self.critic.predict(state, noisyAction), 2))
-            else:
-                print("Evaluation of current state V(s): ", round(self.critic.predict(state), 2))
-            print("Current action:\t", numpy.round(noisyAction, 2))
+        # if __debug__ and bot.player.getSelected():
+        #     print("")
+        #     if self.parameters.ACTOR_CRITIC_TYPE == "DPG" and self.getNoise() != 0:
+        #         print("Evaluation of current state-action Q(s,a): ", round(self.critic.predict(state, noisyAction), 2))
+        #     else:
+        #         print("Evaluation of current state V(s): ", round(self.critic.predict(state), 2))
+        #     print("Current action:\t", numpy.round(noisyAction, 2))
 
         return action, noisyAction
 

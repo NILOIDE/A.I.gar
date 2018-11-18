@@ -1,11 +1,11 @@
-ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
+ALGORITHM = "CACLA" # "Q-learning" or "CACLA" so far
 
 Default = False
 VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "Agar.io"
+GAME_NAME = "CartPole-v1"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
@@ -18,9 +18,9 @@ ENABLE_GREEDY_SPLIT = False
 
 # Experience replay:
 EXP_REPLAY_ENABLED = True
-PRIORITIZED_EXP_REPLAY_ENABLED = False if EXP_REPLAY_ENABLED else False
+PRIORITIZED_EXP_REPLAY_ENABLED = True if EXP_REPLAY_ENABLED else False
 MEMORY_CAPACITY = 75000
-MEMORY_BATCH_LEN = 64
+MEMORY_BATCH_LEN = 32
 MEMORY_ALPHA = 0.6
 MEMORY_BETA = 0.4
 
@@ -30,8 +30,8 @@ ENABLE_TESTING = False
 DUR_TRAIN_TEST_NUM = 10
 TRAIN_PERCENT_TEST_INTERVAL = 5
 FINAL_TEST_NUM = 10
-FRAME_SKIP_RATE = 1
-MAX_TRAINING_STEPS = 10000
+FRAME_SKIP_RATE = 4
+MAX_TRAINING_STEPS = 200000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to maximize gpu effectiveness. 1 == train every step
@@ -112,7 +112,7 @@ INITIALIZER = "glorot_uniform" #"Default" or "glorot_uniform" or "glorot_normal"
 
 # Q-learning
 NEURON_TYPE = "MLP"
-Q_LAYERS = (25,25)
+Q_LAYERS = (250,250,250)
 ALPHA = 0.001 * (1 + DROPOUT * 9)
 SQUARE_ACTIONS = True
 NUM_ACTIONS = 25

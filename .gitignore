@@ -1,5 +1,6 @@
 .idea/*.*
 src/.idea/*.*
+src/.komodotools/*.*
 src/__pycache__/*.*
 src/controller/__pycache__/*.*
 src/model/__pycache__/*.*
