@@ -1,11 +1,11 @@
-ALGORITHM = "CACLA" # "Q-learning" or "CACLA" so far
+ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
 
 Default = False
 VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "CartPole-v1"
+GAME_NAME = "Agar.io"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
@@ -17,8 +17,8 @@ NUM_RANDOM_BOTS = 0
 ENABLE_GREEDY_SPLIT = False
 
 # Experience replay:
-EXP_REPLAY_ENABLED = True
-PRIORITIZED_EXP_REPLAY_ENABLED = False if EXP_REPLAY_ENABLED else False
+EXP_REPLAY_ENABLED = False
+PRIORITIZED_EXP_REPLAY_ENABLED = True if EXP_REPLAY_ENABLED else False
 MEMORY_CAPACITY = 75000
 MEMORY_BATCH_LEN = 32
 MEMORY_ALPHA = 0.6

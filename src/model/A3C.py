@@ -41,6 +41,7 @@ class ValueNetwork(object):
         regularizer = keras.regularizers.l2(self.parameters.CACLA_CRITIC_WEIGHT_DECAY)
         layerIterable = iter(self.layers)
 
+
         if self.parameters.CNN_REPR:
             self.input = cnnInput
             previousLayer = cnnLayers

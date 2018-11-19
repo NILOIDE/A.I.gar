@@ -853,7 +853,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
                 print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if done:
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
-                  "Collector #" + str(processNum) + " had an episode mean length of " + str(step))
+                  "Collector #" + str(processNum) + " had an episode length of " + str(step))
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
             observation = env.reset()
             observation = np.array([observation])
@@ -1056,7 +1056,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     if __debug__:
         print("Trainer sending signal: 'DONE'")
     queue.put("DONE")
-    cartPoleTest(learningAlg, path, "end.png")
+    cartPoleTest(learningAlg, path, "end.png", parameters)
 
 
 def cartPoleTest(alg, path, name, parameters):
