@@ -4,6 +4,7 @@ src/.komodotools/*.*
 src/__pycache__/*.*
 src/controller/__pycache__/*.*
 src/model/__pycache__/*.*
+src/model/common/__pycache__/*.*
 src/view/__pycache__/*.*
 src/savedModels/
 src/savedModels_old/
