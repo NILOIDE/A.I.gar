@@ -291,11 +291,22 @@ class ActionValueNetwork(object):
         self.activationFuncHidden = self.parameters.DPG_CRITIC_FUNC
         self.layers = self.parameters.DPG_CRITIC_LAYERS
 
-        self.num_actions_inputs = 2  # x, y, split, eject all continuous between 0 and 1
-        if self.parameters.ENABLE_SPLIT:
-            self.num_actions_inputs += 1
-        if self.parameters.ENABLE_EJECT:
-            self.num_actions_inputs += 1
+        if self.parameters.GAME_NAME == "Agar.io":
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
+            self.num_actions_inputs = 2  # x, y, split, eject all continuous between 0 and 1
+            if self.parameters.ENABLE_SPLIT:
+                self.num_actions_inputs += 1
+            if self.parameters.ENABLE_EJECT:
+                self.num_actions_inputs += 1
+        else:
+            import gym
+            env = gym.make(self.parameters.GAME_NAME)
+            if self.parameters.CNN_REPR:
+                pass
+            else:
+                self.stateReprLen = env.observation_space.shape[0]
+                self.num_outputs = env.action_space.n
+
 
         if modelName is not None:
             self.load(modelName)

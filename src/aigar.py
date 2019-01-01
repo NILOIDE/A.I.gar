@@ -364,6 +364,8 @@ def createNetwork(parameters, path):
         learningAlg = QLearn(parameters)
     elif algorithm == "CACLA":
         learningAlg = ActorCritic(parameters)
+    elif algorithm == "DPG":
+        learningAlg = ActorCritic(parameters)
     else:
         print("Wrong algorithm name in parameters.")
         quit()
@@ -392,6 +394,8 @@ def createBots(number, model, botType, parameters, networkLoadPath=None):
             if algorithm == "Q-learning":
                 learningAlg = QLearn(parameters)
             elif algorithm == "CACLA":
+                learningAlg = ActorCritic(parameters)
+            elif algorithm == "DPG":
                 learningAlg = ActorCritic(parameters)
             else:
                 print("Please enter a valid algorithm.\n")
@@ -782,6 +786,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         learningAlg = QLearn(parameters)
     elif parameters.ALGORITHM == "CACLA":
         learningAlg = ActorCritic(parameters)
+    elif parameters.ALGORITHM == "DPG":
+        learningAlg = ActorCritic(parameters)
     else:
         print("Please enter a valid algorithm.\n")
         quit()
@@ -797,7 +803,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         if guiEnabled and processInGUISet:
             env.render()
         actionIdx, action = learningAlg.decideMove(observation, False)
-        if parameters.ALGORITHM == "CACLA":
+        # If environment has discrete actions, but algorithm is continuous, pick action with highest Q(v)
+        if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
             actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
         observation = np.array([observation])
@@ -815,7 +822,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     while True:
         actionIdx, action = learningAlg.decideMove(observation)
         actionIdx, action = learningAlg.decideMove(observation)
-        if parameters.ALGORITHM == "CACLA":
+        if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
             actionIdx = np.argmax(action)
         for _ in range(parameters.FRAME_SKIP_RATE):
             if guiEnabled and processInGUISet:
@@ -909,6 +916,10 @@ def createLearner(parameters, path):
         learningAlg = QLearn(parameters)
     elif algorithmName == "CACLA":
         learningAlg = ActorCritic(parameters)
+    elif algorithmName == "DPG":
+        learningAlg = ActorCritic(parameters)
+    else:
+        print("Please enter a valid algorithm.\n")
     learningAlg.initializeNetwork(path)
     return learningAlg
 
@@ -1072,7 +1083,7 @@ def cartPoleTest(alg, path, name, parameters):
                 values = network.predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
                 row.append(values[np.argmax(values)])
 
-            elif parameters.ALGORITHM == "CACLA":
+            elif parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
                 network = alg.getNetworks()["V(S)"]
                 value = network.predict(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
                 row.append(value)
@@ -1091,30 +1102,6 @@ def cartPoleTest(alg, path, name, parameters):
     plt.xlabel("Angle (rad)")
     plt.ylabel("Velocity (rad/time)")
     plt.savefig(name)
-
-# def cartPoleTest(alg, path, name):
-    # x = []
-    # y = []
-    # z = []
-    # for t in range(30*5):
-    #     x.append(str(float(3.14/180*t/5 -3.14/180*15)))
-    #     row = []
-    #     # for v in range(3*5):
-    #     #     values = alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
-    #     #     row.append(values[np.argmax(values)])
-    #     z.append(alg.getNetwork().predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(3.14/180*t/5 -3.14/180*15)*6]])))
-    #
-    # for v in range(30*5):
-    #     y.append(str(float(3.14/180*v/5 -3.14/180*15)*6))
-    #
-    # x = np.array(x)
-    # y = np.array(y)
-    # z = np.array(z)
-    # plt.imshow(z, extent=[-0.26,0.26,-3.1,3.1], aspect="auto")
-    # plt.ylabel("Angle (rad)")
-    # plt.xlabel("Action")
-    # plt.savefig(name)
-
 
 # Create the asynchronous training procedure.
 # The experience replay buffer is created as a multiprocessing.mp.Manager. This manager takes form as the expReplay class
@@ -1268,8 +1255,7 @@ def run():
         modifyParameterValue(tweakedTotal, modelPath)
     packageName = getPackageName(modelPath)
     print("Import package name: " + packageName)
-    parameters = importlib.import_module('.networkParameters', package=packageName)
-
+    parameters = importlib.import_module(packageName +'.networkParameters')
     # Initialize network while number of humans is determined
     if parameters.CURRENT_STEP == 0:
         print("\nInitializing network...\n")

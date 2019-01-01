@@ -8,3 +8,5 @@ src/view/__pycache__/*.*
 src/savedModels/
 src/savedModels_old/
 /workspace.xml
+src/*.png
+src/*.komodoproject

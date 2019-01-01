@@ -1,4 +1,4 @@
-ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" so far
+ALGORITHM = "CACLA" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
@@ -31,7 +31,7 @@ DUR_TRAIN_TEST_NUM = 10
 TRAIN_PERCENT_TEST_INTERVAL = 5
 FINAL_TEST_NUM = 10
 FRAME_SKIP_RATE = 4
-MAX_TRAINING_STEPS = 10000
+MAX_TRAINING_STEPS = 500000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to maximize gpu effectiveness. 1 == train every step
@@ -212,14 +212,14 @@ CNN_L3 = (3, 1, 64)
 CNN_INPUT_DIM_3 = 42
 
 # Pixel representation
-CNN_P_REPR = True
-CNN_P_RGB = False
+CNN_P_REPR = True if CNN_REPR else False
+CNN_P_RGB = False if CNN_P_REPR else False
 CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
 NUM_COLLECTORS = 3
-NUM_EXPS_BEFORE_TRAIN = 10#int(MEMORY_CAPACITY/40) # 1818 is 20k game steps worth of exps
+NUM_EXPS_BEFORE_TRAIN = int(MEMORY_CAPACITY/40) # 1818 is 20k game steps worth of exps
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0
 TESTING_WORKER_POOL = DUR_TRAIN_TEST_NUM
