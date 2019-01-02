@@ -145,8 +145,6 @@ class PolicyNetwork(object):
         self.parameters = parameters
         self.loadedModelName = None
 
-        
-
         if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
             self.learningRate = self.parameters.DPG_ACTOR_ALPHA
             self.layers = parameters.DPG_ACTOR_LAYERS
@@ -213,8 +211,8 @@ class PolicyNetwork(object):
 
         output = Dense(self.num_outputs, activation="sigmoid", bias_initializer=initializer,
                        kernel_initializer=initializer)(previousLayer)
-        self.model = keras.models.Model(inputs=self.input, outputs=output)
 
+        self.model = keras.models.Model(inputs=self.input, outputs=output)
         optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
 
         self.target_model = keras.models.clone_model(self.model)
@@ -454,8 +452,6 @@ class ActorCritic(object):
                         channels = 1
                     if self.parameters.CNN_LAST_GRID:
                         channels = channels * 2
-                    if self.parameters.COORDCONV:
-                        channels += 2
     
                     if self.parameters.CNN_USE_L1:
                         self.input_len = (self.parameters.CNN_INPUT_DIM_1,
@@ -516,23 +512,24 @@ class ActorCritic(object):
 
     def createNetwork(self):
         networks = {}
+        cnnLayers = None
         if self.parameters.CNN_REPR:
-            cnnLayers = self.createCNN()
+            cnnLayers, cnnInput = self.createCNN()
         if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
-            self.actor = PolicyNetwork(self.parameters, None)
-            self.critic = ActionValueNetwork(self.parameters, None)
+            self.actor = PolicyNetwork(self.parameters, None, cnnLayers, cnnInput)
+            self.critic = ActionValueNetwork(self.parameters, None, cnnLayers, cnnInput)
             self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
             networks["MU(S)"] = self.actor
             networks["Q(S,A)"] = self.critic
             networks["Actor-Critic-Combo"] = self.combinedActorCritic
         else:
-            self.actor = PolicyNetwork(self.parameters, None)
+            self.actor = PolicyNetwork(self.parameters, None, cnnLayers, cnnInput)
             networks["MU(S)"] = self.actor
             if self.parameters.OCACLA_ENABLED:
-                self.critic = ActionValueNetwork(self.parameters, None)
+                self.critic = ActionValueNetwork(self.parameters, None, cnnLayers, cnnInput)
                 networks["Q(S,A)"] = self.critic
             else:
-                self.critic = ValueNetwork(self.parameters, None)
+                self.critic = ValueNetwork(self.parameters, None, cnnLayers, cnnInput)
                 networks["V(S)"] = self.critic
         self.networks = networks
 
@@ -543,22 +540,22 @@ class ActorCritic(object):
                 networks = {}
             cnnLayers = None
             if self.parameters.CNN_REPR:
-                cnnLayers = self.createCNN()
+                cnnLayers, cnnInput = self.createCNN()
             if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
-                self.actor = PolicyNetwork(self.parameters, loadPath)
-                self.critic = ActionValueNetwork(self.parameters, loadPath)
+                self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
+                self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
                 networks["MU(S)"] = self.actor
                 networks["Q(S,A)"] = self.critic
                 networks["Actor-Critic-Combo"] = self.combinedActorCritic
             else:
-                self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, self.input)
+                self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 networks["MU(S)"] = self.actor
                 if self.parameters.OCACLA_ENABLED:
-                    self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, self.input)
+                    self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                     networks["Q(S,A)"] = self.critic
                 else:
-                    self.critic = ValueNetwork(self.parameters, loadPath, cnnLayers, self.input)
+                    self.critic = ValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                     networks["V(S)"] = self.critic
         else:
             self.actor  = networks["MU(S)"]
@@ -599,8 +596,8 @@ class ActorCritic(object):
         else:
             input_len = self.input_len
 
-        self.input = Input(shape=input_len)
-        conv = self.input
+        cnnInput = Input(shape=input_len)
+        conv = cnnInput
         if self.parameters.CNN_USE_L1:
             conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
                           strides=(kernel_1[1], kernel_1[1]), activation='relu',
@@ -615,7 +612,7 @@ class ActorCritic(object):
                           data_format=data_format)(conv)
 
         cnnLayers = Flatten()(conv)
-        return cnnLayers
+        return cnnLayers, cnnInput
 
     def updateNoise(self):
         self.std *= self.noise_decay_factor
@@ -785,6 +782,7 @@ class ActorCritic(object):
                     trainInputs = inputs[:training_this_epoch]
                     trainTargets = targets[:training_this_epoch]
                     train_used_imp_weights = used_imp_weights[:training_this_epoch]
+                    print(numpy.shape(trainInputs))
                     self.actor.train(trainInputs, trainTargets, train_used_imp_weights)
         else:
             if pos_tde_count > 0:
@@ -961,8 +959,9 @@ class ActorCritic(object):
         batch_len = len(batch[0])
 
         if self.parameters.CNN_REPR:
-            inputShape = numpy.array([batch_len] + list(self.input_len[0]))
+            inputShape = numpy.array([batch_len] + [self.input_len[0]])
             inputs_critic = numpy.zeros(inputShape)
+            print(inputs_critic.shape)
             if self.parameters.EXTRA_INPUT:
                 extraInput = numpy.zeros((batch_len, self.input_len[1]))
                 inputs_critic = [inputs_critic, extraInput]
@@ -988,6 +987,8 @@ class ActorCritic(object):
             if self.parameters.CNN_REPR and self.parameters.EXTRA_INPUT:
                 inputs_critic[0][sample_idx] = old_s[0]
                 inputs_critic[1][sample_idx] = old_s[1]
+            elif self.parameters.CNN_REPR:
+                inputs_critic[:,:,sample_idx] = old_s
             else:
                 inputs_critic[sample_idx] = old_s
             targets_critic[sample_idx] = target

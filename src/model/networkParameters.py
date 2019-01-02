@@ -1,4 +1,4 @@
-ALGORITHM = "CACLA" # "Q-learning" or "CACLA" or "DPG" so far
+ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
@@ -91,16 +91,15 @@ if GAME_NAME == "Agar.io":
     if ALL_PLAYER_GRID:
         SELF_GRID = False
         ENEMY_GRID = False
-    COORDCONV = False
-    USE_FOVSIZE = True
+    USE_FOVSIZE = True#
     USE_LAST_FOVSIZE = ENABLE_SPLIT
-    USE_TOTALMASS = True
+    USE_TOTALMASS = True#
     USE_LAST_ACTION = ENABLE_SPLIT
     USE_SECOND_LAST_ACTION = False
     GRID_SQUARES_PER_FOV = 11 #11 is pretty good so far.
     NUM_OF_GRIDS = PELLET_GRID + SELF_GRID + WALL_GRID + VIRUS_GRID + ENEMY_GRID \
                    + SIZE_GRID + SELF_GRID_LF + SELF_GRID_SLF \
-                   + ENEMY_GRID_LF + ENEMY_GRID_SLF + ALL_PLAYER_GRID + COORDCONV*2
+                   + ENEMY_GRID_LF + ENEMY_GRID_SLF + ALL_PLAYER_GRID
     EXTRA_INPUT = USE_FOVSIZE + USE_TOTALMASS + USE_LAST_ACTION * 4 + USE_SECOND_LAST_ACTION * 4 + USE_LAST_FOVSIZE
     STATE_REPR_LEN = GRID_SQUARES_PER_FOV * GRID_SQUARES_PER_FOV * NUM_OF_GRIDS + EXTRA_INPUT
 else:
@@ -195,8 +194,7 @@ TRACE_MIN = 1 # The minimum amount of traces that are not trained on, as they ha
 MEMORY_TRACE_LEN = 15 # The length of memory traces retrieved via exp replay
 
 # CNN
-CNN_REPR = False
-CNN_TOWER = False
+CNN_REPR = True
 
 # Handcraft representation
 CNN_USE_L1 = True
@@ -212,13 +210,13 @@ CNN_L3 = (3, 1, 64)
 CNN_INPUT_DIM_3 = 42
 
 # Pixel representation
-CNN_P_REPR = True if CNN_REPR else False
+CNN_P_REPR = False if CNN_REPR else False
 CNN_P_RGB = False if CNN_P_REPR else False
 CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_COLLECTORS = 3
+NUM_COLLECTORS = 1
 NUM_EXPS_BEFORE_TRAIN = int(MEMORY_CAPACITY/40) # 1818 is 20k game steps worth of exps
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0

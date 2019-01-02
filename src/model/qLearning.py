@@ -59,8 +59,9 @@ class QLearn(object):
                     else:
                         self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
                                           self.parameters.CNN_INPUT_DIM_3)
+                self.input_len = [self.input_len]
                 if self.parameters.EXTRA_INPUT:
-                    self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
+                    self.input_len = self.input_len + [self.parameters.EXTRA_INPUT]
 
             elif self.parameters.USE_ACTION_AS_INPUT:
                 self.input_len = parameters.STATE_REPR_LEN + 4

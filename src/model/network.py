@@ -419,21 +419,13 @@ class Network(object):
             else:
                 return self.valueNetwork.predict(numpy.array([numpy.array([state])]))[0][0]
         if self.parameters.CNN_REPR:
-            if self.parameters.CNN_TOWER:
-                stateRepr = numpy.zeros((len(state), 1, 1,  len(state[0]), len(state[0])))
+            if len(state) == 2:
+                grid = numpy.array([state[0]])
+                extra = numpy.array([state[1]])
 
-                for gridIdx, grid in enumerate(state):
-                    stateRepr[gridIdx][0][0] = grid
-                state = list(stateRepr)
-
+                state = [grid, extra]
             else:
-                if len(state) == 2:
-                    grid = numpy.array([state[0]])
-                    extra = numpy.array([state[1]])
-
-                    state = [grid, extra]
-                else:
-                    state = numpy.array([state])
+                state = numpy.array([state])
         with self.graph.as_default():
             prediction = self.valueNetwork.predict(state)[0]
             return prediction
@@ -451,23 +443,14 @@ class Network(object):
             else:
                 return self.targetNetwork.predict(numpy.array([numpy.array([state])]))[0][0]
         if self.parameters.CNN_REPR:
-            if self.parameters.CNN_TOWER:
-                stateRepr = numpy.zeros((len(state), 1, 1,  len(state[0]), len(state[0])))
+            if len(state) == 2:
+                grid = numpy.array([state[0]])
+                extra = numpy.array([state[1]])
 
-                for gridIdx, grid in enumerate(state):
-                    stateRepr[gridIdx][0][0] = grid
-                stateRepr = list(stateRepr)
-
-                return self.targetNetwork.predict(stateRepr)[0]
+                state = [grid, extra]
             else:
-                if len(state) == 2:
-                    grid = numpy.array([state[0]])
-                    extra = numpy.array([state[1]])
-
-                    state = [grid, extra]
-                else:
-                    state = numpy.array([state])
-                return self.targetNetwork.predict(state)[0]
+                state = numpy.array([state])
+            return self.targetNetwork.predict(state)[0]
         else:
             return self.targetNetwork.predict(state)[0]
 

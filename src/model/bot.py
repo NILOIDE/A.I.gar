@@ -288,11 +288,6 @@ class Bot(object):
                         if self.parameters.CNN_LAST_GRID:
                             gridView = numpy.concatenate((gridView, self.lastPixelGrid), axis=2)
                             self.lastPixelGrid = gridView
-                        if self.parameters.COORDCONV:
-                            coordConv_row, coordConv_col = self.getCoorConvGrids()
-                            coordConv = numpy.array([coordConv_row,coordConv_col])
-                            coordConv = coordConv.reshape((self.gridSquaresPerFov, self.gridSquaresPerFov, 2))
-                            gridView = numpy.concatenate((gridView, coordConv), axis=2)
                     else:
                         gridView = self.getGridStateRepresentation()
 
@@ -400,11 +395,6 @@ class Bot(object):
         gsVirus = None
         if self.field.getVirusEnabled():
             gsVirus = numpy.zeros((gridSquaresPerFov, gridSquaresPerFov))
-        coordConv_row = None
-        coordConv_col = None
-        # Create row and column grids
-        if self.parameters.COORDCONV:
-            coordConv_row, coordConv_col = self.getCoorConvGrids()
 
         gridView = numpy.zeros((self.parameters.NUM_OF_GRIDS, gridSquaresPerFov, gridSquaresPerFov))
         # gsMidPoint is adjusted in the loops
@@ -500,12 +490,6 @@ class Bot(object):
         if self.parameters.VIRUS_GRID:
             gridView[count] = gsVirus
             count += 1
-
-        # CoordConv
-        if self.parameters.COORDCONV:
-            gridView[count] = coordConv_row
-            gridView[count+1] = coordConv_col
-            count += 2
 
         # Add grids about own cells and enemy cells from previous frames:
         if self.parameters.SELF_GRID_SLF:
