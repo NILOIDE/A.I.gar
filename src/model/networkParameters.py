@@ -1,4 +1,4 @@
-ALGORITHM = "Q-learning" # "Q-learning" or "CACLA" or "DPG" so far
+ALGORITHM = "DPG" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
@@ -17,7 +17,7 @@ NUM_RANDOM_BOTS = 0
 ENABLE_GREEDY_SPLIT = False
 
 # Experience replay:
-EXP_REPLAY_ENABLED = False
+EXP_REPLAY_ENABLED = True
 PRIORITIZED_EXP_REPLAY_ENABLED = True if EXP_REPLAY_ENABLED else False
 MEMORY_CAPACITY = 75000
 MEMORY_BATCH_LEN = 32
@@ -91,9 +91,9 @@ if GAME_NAME == "Agar.io":
     if ALL_PLAYER_GRID:
         SELF_GRID = False
         ENEMY_GRID = False
-    USE_FOVSIZE = True#
+    USE_FOVSIZE = True
     USE_LAST_FOVSIZE = ENABLE_SPLIT
-    USE_TOTALMASS = True#
+    USE_TOTALMASS = True
     USE_LAST_ACTION = ENABLE_SPLIT
     USE_SECOND_LAST_ACTION = False
     GRID_SQUARES_PER_FOV = 11 #11 is pretty good so far.
@@ -132,7 +132,7 @@ AC_DELAY_ACTOR_TRAINING = 0
 AC_ACTOR_TRAINING_START = AC_DELAY_ACTOR_TRAINING * MAX_TRAINING_STEPS
 AC_NOISE_AT_HALF = 0.03
 AC_NOISE_DECAY = AC_NOISE_AT_HALF ** (1 / (MAX_TRAINING_STEPS / 2)) if MAX_TRAINING_STEPS != 0 else 0
-ACTOR_CRITIC_TYPE = "CACLA" # "Standard"/"CACLA" / "DPG". Standard multiplies gradient by tdE, CACLA only updates once for positive tdE
+#ACTOR_CRITIC_TYPE = "CACLA" # "Standard"/"CACLA" / "DPG". Standard multiplies gradient by tdE, CACLA only updates once for positive tdE
 SOFT_TARGET_UPDATES = True
 POLICY_OUTPUT_ACTIVATION_FUNC = "sigmoid"
 ACTOR_REPLAY_ENABLED = True
@@ -216,8 +216,8 @@ CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_COLLECTORS = 1
-NUM_EXPS_BEFORE_TRAIN = int(MEMORY_CAPACITY/40) # 1818 is 20k game steps worth of exps
+NUM_COLLECTORS = 3
+NUM_EXPS_BEFORE_TRAIN = 32#int(MEMORY_CAPACITY/40) 
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0
 TESTING_WORKER_POOL = DUR_TRAIN_TEST_NUM

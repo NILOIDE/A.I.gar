@@ -215,7 +215,7 @@ class Bot(object):
                 action = self.currentActionIdx if self.learningAlg.discrete else self.currentAction
                 if self.gatherExperiences:
                     if str(self.learningAlg) != "Q-learning":
-                        if self.parameters.ACTOR_CRITIC_TYPE == "CACLA":
+                        if self.parameters.ALGORITHM== "CACLA":
                             # Save raw action without noise in "done" field to later determine difference in policies
                             self.experiences.append((self.oldState, action, self.lastReward, newState, self.currentRawAction))
                         else:
@@ -284,19 +284,12 @@ class Bot(object):
             if self.parameters.GRID_VIEW_ENABLED:
                 if self.parameters.CNN_REPR:
                     if self.parameters.CNN_P_REPR:
-                        gridView = self.rgbGenerator.get_cnn_inputRGB(self.player)
+                        stateRepr = self.rgbGenerator.get_cnn_inputRGB(self.player)
                         if self.parameters.CNN_LAST_GRID:
-                            gridView = numpy.concatenate((gridView, self.lastPixelGrid), axis=2)
-                            self.lastPixelGrid = gridView
+                            stateRepr = numpy.concatenate((stateRepr, self.lastPixelGrid), axis=2)
+                            self.lastPixelGrid = stateRepr
                     else:
-                        gridView = self.getGridStateRepresentation()
-
-                    if self.parameters.EXTRA_INPUT:
-                        additionalFeatures = self.getAdditionalFeatures()
-                        stateRepr = [gridView, additionalFeatures]
-                    else:
-                        stateRepr = gridView
-
+                        stateRepr = self.getGridStateRepresentation()
                 else:
                     gridView = self.getGridStateRepresentation()
                     gridView = gridView.flatten()

@@ -218,15 +218,7 @@ class Network(object):
                 constraint = None
 
             if parameters.CNN_REPR:
-                previousLayer = self.input
-                extraInputSize = self.parameters.EXTRA_INPUT
-                if extraInputSize > 0:
-                    extraInput = Input(shape=(extraInputSize,))
-                    self.input = [self.input, extraInput]
-                    denseInput = keras.layers.concatenate([self.valueNetwork, extraInput])
-                    previousLayer = Dense(next(layerIterable), activation=self.activationFuncHidden,
-                                        bias_initializer=initializer, kernel_initializer=initializer,
-                                          kernel_regularizer=regularizer)(denseInput)
+                previousLayer = self.valueNetwork
             else:
                 self.input = Input(shape=(inputDim,))
                 previousLayer = self.input
@@ -400,8 +392,6 @@ class Network(object):
             if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
                 return self.valueNetwork.train_on_batch(inputs, targets, sample_weight=importance_weights)
             else:
-                # print("")
-                # print(targets)
                 return self.valueNetwork.train_on_batch(inputs, targets)
 
     def updateActionNetwork(self):
@@ -419,13 +409,7 @@ class Network(object):
             else:
                 return self.valueNetwork.predict(numpy.array([numpy.array([state])]))[0][0]
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-
-                state = [grid, extra]
-            else:
-                state = numpy.array([state])
+            state = numpy.array([state])
         with self.graph.as_default():
             prediction = self.valueNetwork.predict(state)[0]
             return prediction
@@ -443,13 +427,7 @@ class Network(object):
             else:
                 return self.targetNetwork.predict(numpy.array([numpy.array([state])]))[0][0]
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-
-                state = [grid, extra]
-            else:
-                state = numpy.array([state])
+            state = numpy.array([state])
             return self.targetNetwork.predict(state)[0]
         else:
             return self.targetNetwork.predict(state)[0]

@@ -53,14 +53,6 @@ class ValueNetwork(object):
         if self.parameters.CNN_REPR:
             self.input = cnnInput
             previousLayer = cnnLayers
-            extraInputSize = self.parameters.EXTRA_INPUT
-            if extraInputSize > 0:
-                extraInput = Input(shape=(extraInputSize,))
-                self.input = [cnnInput, extraInput]
-                denseInput = keras.layers.concatenate([cnnLayers, extraInput])
-                previousLayer = Dense(next(layerIterable), activation=self.activationFuncHidden,
-                                      bias_initializer=initializer, kernel_initializer=initializer,
-                                      kernel_regularizer=regularizer)(denseInput)
         else:
             self.input = keras.layers.Input((self.stateReprLen,))
             previousLayer = self.input
@@ -145,7 +137,7 @@ class PolicyNetwork(object):
         self.parameters = parameters
         self.loadedModelName = None
 
-        if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+        if self.parameters.ALGORITHM == "DPG":
             self.learningRate = self.parameters.DPG_ACTOR_ALPHA
             self.layers = parameters.DPG_ACTOR_LAYERS
         else:
@@ -176,48 +168,39 @@ class PolicyNetwork(object):
 
         if modelName is not None:
             self.load(modelName)
-            return
-
-        if self.parameters.INITIALIZER == "glorot_uniform":
-            initializer = keras.initializers.glorot_uniform()
-        elif self.parameters.INITIALIZER == "glorot_normal":
-            initializer = keras.initializers.glorot_normal()
         else:
-            weight_initializer_range = math.sqrt(6 / (self.stateReprLen + 1))
-            initializer = keras.initializers.RandomUniform(minval=-weight_initializer_range,
-                                                           maxval=weight_initializer_range, seed=None)
-
-        layerIterable = iter(self.layers)
-
-        if self.parameters.CNN_REPR:
-            self.input = cnnInput
-            previousLayer = cnnLayers
-            extraInputSize = self.parameters.EXTRA_INPUT
-            if extraInputSize > 0:
-                extraInput = Input(shape=(extraInputSize,))
-                self.input = [cnnInput, extraInput]
-                denseInput = keras.layers.concatenate([cnnLayers, extraInput])
-                previousLayer = Dense(next(layerIterable), activation=self.activationFuncHidden,
-                                      bias_initializer=initializer, kernel_initializer=initializer)(denseInput)
-        else:
-            self.input = keras.layers.Input((self.stateReprLen,))
-            previousLayer = self.input
-
-        for neuronNumber in layerIterable:
-            if neuronNumber > 0:
-                previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
-                                      kernel_initializer=initializer)(previousLayer)
-
-
-        output = Dense(self.num_outputs, activation="sigmoid", bias_initializer=initializer,
-                       kernel_initializer=initializer)(previousLayer)
-
-        self.model = keras.models.Model(inputs=self.input, outputs=output)
+            if self.parameters.INITIALIZER == "glorot_uniform":
+                initializer = keras.initializers.glorot_uniform()
+            elif self.parameters.INITIALIZER == "glorot_normal":
+                initializer = keras.initializers.glorot_normal()
+            else:
+                weight_initializer_range = math.sqrt(6 / (self.stateReprLen + 1))
+                initializer = keras.initializers.RandomUniform(minval=-weight_initializer_range,
+                                                               maxval=weight_initializer_range, seed=None)
+    
+            layerIterable = iter(self.layers)
+    
+            if self.parameters.CNN_REPR:
+                self.input = cnnInput
+                previousLayer = cnnLayers
+            else:
+                self.input = keras.layers.Input((self.stateReprLen,))
+                previousLayer = self.input
+    
+            for neuronNumber in layerIterable:
+                if neuronNumber > 0:
+                    previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
+                                          kernel_initializer=initializer)(previousLayer)
+    
+    
+            output = Dense(self.num_outputs, activation="sigmoid", bias_initializer=initializer,
+                           kernel_initializer=initializer)(previousLayer)
+    
+            self.model = keras.models.Model(inputs=self.input, outputs=output)
+            
         optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
-
         self.target_model = keras.models.clone_model(self.model)
         self.target_model.set_weights(self.model.get_weights())
-
         self.model.compile(loss='mse', optimizer=optimizer)
         self.target_model.compile(loss='mse', optimizer=optimizer)
 
@@ -230,26 +213,13 @@ class PolicyNetwork(object):
 
     def predict(self, state):
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-
-                state = [grid, extra]
-            else:
-                state = numpy.array([state])
+            state = numpy.array([state])
         return self.model.predict(state)[0]
 
     def predict_target_model(self, state):
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-
-                state = [grid, extra]
-            else:
-                state = numpy.array([state])
+            state = numpy.array([state])
         return self.target_model.predict(state)
-
 
     def train(self, inputs, targets, weights = None):
         if self.parameters.ACTOR_IS and weights is not None:
@@ -258,12 +228,12 @@ class PolicyNetwork(object):
             self.model.train_on_batch(inputs, targets)
 
     def update_target_model(self):
-        if self.parameters.ACTOR_CRITIC_TYPE != "DPG":
+        if self.parameters.ALGORITHM != "DPG":
             return
         self.target_model.set_weights(self.model.get_weights())
 
     def softlyUpdateTargetModel(self):
-        if self.parameters.ACTOR_CRITIC_TYPE != "DPG":
+        if self.parameters.ALGORITHM != "DPG":
             return
         tau = self.parameters.DPG_TAU
         targetWeights = self.target_model.get_weights()
@@ -300,10 +270,13 @@ class ActionValueNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                pass
+                print("This environment does not work with CNNs")
+                quit()
             else:
                 self.stateReprLen = env.observation_space.shape[0]
                 self.num_outputs = env.action_space.n
+                print(self.stateReprLen)
+                print(self.num_outputs)
 
 
         if modelName is not None:
@@ -319,17 +292,6 @@ class ActionValueNetwork(object):
         if self.parameters.CNN_REPR:
             self.inputState = cnnInput
             previousLayer = cnnLayers
-            extraInputSize = self.parameters.EXTRA_INPUT
-            if extraInputSize > 0:
-                idx, neuronNumber = next(layerIterable)
-                extraInput = Input(shape=(extraInputSize,))
-                self.inputState = [cnnInput, extraInput]
-                denseInput = keras.layers.concatenate([cnnLayers, extraInput])
-                if idx == parameters.DPG_FEED_ACTION_IN_LAYER - 1:
-                    mergeLayer = keras.layers.concatenate([denseInput, self.inputAction])
-                    denseInput = mergeLayer
-                previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden,
-                                      bias_initializer=initializer, kernel_initializer=initializer)(denseInput)
         else:
             self.inputState = keras.layers.Input((self.stateReprLen,))
             previousLayer = self.inputState
@@ -343,14 +305,7 @@ class ActionValueNetwork(object):
 
         output = Dense(1, activation="linear", bias_initializer=initializer, kernel_initializer=initializer,
                        kernel_regularizer=regularizer)(previousLayer)
-        if self.parameters.CNN_REPR:
-            extraInputSize = self.parameters.EXTRA_INPUT
-            if extraInputSize > 0:
-                self.model = keras.models.Model(inputs=[self.inputState[0], self.inputState[1], self.inputAction], outputs=output)
-            else:
-                self.model = keras.models.Model(inputs=[self.inputState, self.inputAction], outputs=output)
-        else:
-            self.model = keras.models.Model(inputs=[self.inputState, self.inputAction], outputs=output)
+        self.model = keras.models.Model(inputs=[self.inputState, self.inputAction], outputs=output)
 
 
         optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
@@ -370,31 +325,12 @@ class ActionValueNetwork(object):
 
     def predict(self, state, action):
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-                return self.target_model.predict([grid, extra, action])[0][0]
-            else:
-                grid = numpy.array([state])
-                return self.target_model.predict([grid, action])[0][0]
-
+            state = numpy.array([state])
         return self.model.predict([state, action])[0][0]
 
     def predict_target_model(self, state, action):
         if self.parameters.CNN_REPR:
-            if len(state) == 2:
-                grid = numpy.array([state[0]])
-                extra = numpy.array([state[1]])
-                #
-                # state = [grid, extra]
-                return self.target_model.predict([grid, extra, action])[0][0]
-
-            else:
-                grid = numpy.array([state])
-                return self.target_model.predict([grid, action])[0][0]
-
-            # action = numpy.array([action])
-
+            state = numpy.array([state])
         return self.target_model.predict([state, action])[0][0]
 
     def update_target_model(self):
@@ -426,13 +362,12 @@ class ActorCritic(object):
     def __init__(self, parameters):
         self.discount = 0 if parameters.END_DISCOUNT else parameters.DISCOUNT
         self.discrete = False
-        self.acType = parameters.ACTOR_CRITIC_TYPE
+        self.acType = parameters.ALGORITHM
         self.parameters = parameters
         self.std = self.parameters.GAUSSIAN_NOISE
         self.noise_decay_factor = self.parameters.AC_NOISE_DECAY
         self.ocacla_noise = 1
         self.ocacla_noise_decay = self.parameters.OCACLA_NOISE_DECAY
-        self.steps = 0
         self.counts = [] # For SPG/CACLA: count how much actor training we do each step
         self.caclaVar = parameters.CACLA_VAR_START
         self.input = None
@@ -473,8 +408,6 @@ class ActorCritic(object):
                     else:
                         self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
                                           self.parameters.CNN_INPUT_DIM_3)
-                if self.parameters.EXTRA_INPUT:
-                    self.input_len = [self.input_len, self.parameters.EXTRA_INPUT]
         else:
             import gym
             env = gym.make(self.parameters.GAME_NAME)
@@ -506,16 +439,16 @@ class ActorCritic(object):
             else:
                 optimizer = keras.optimizers.SGD(lr=actor.learningRate)
 
-
         combinedModel.compile(optimizer=optimizer, loss="mse")
         return combinedModel
 
     def createNetwork(self):
         networks = {}
         cnnLayers = None
+        cnnInput = None
         if self.parameters.CNN_REPR:
             cnnLayers, cnnInput = self.createCNN()
-        if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+        if self.parameters.ALGORITHM == "DPG":
             self.actor = PolicyNetwork(self.parameters, None, cnnLayers, cnnInput)
             self.critic = ActionValueNetwork(self.parameters, None, cnnLayers, cnnInput)
             self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
@@ -539,9 +472,10 @@ class ActorCritic(object):
             if networks is None:
                 networks = {}
             cnnLayers = None
+            cnnInput = None
             if self.parameters.CNN_REPR:
                 cnnLayers, cnnInput = self.createCNN()
-            if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+            if self.parameters.ALGORITHM == "DPG":
                 self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
@@ -559,7 +493,7 @@ class ActorCritic(object):
                     networks["V(S)"] = self.critic
         else:
             self.actor  = networks["MU(S)"]
-            if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+            if self.parameters.ALGORITHM == "DPG":
                 self.critic = networks["Q(S,A)"]
                 self.combinedActorCritic = networks["Actor-Critic-Combo"]
             else:
@@ -591,10 +525,7 @@ class ActorCritic(object):
         else:
             data_format = 'channels_first'
 
-        if self.parameters.EXTRA_INPUT:
-            input_len = self.input_len[0]
-        else:
-            input_len = self.input_len
+        input_len = self.input_len
 
         cnnInput = Input(shape=input_len)
         conv = cnnInput
@@ -672,13 +603,13 @@ class ActorCritic(object):
 
     def learn(self, batch, step):
         updated_actions = None
-        if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+        if self.parameters.ALGORITHM == "DPG":
             idxs, priorities = self.train_critic_DPG(batch)
-            if self.parameters.DPG_USE_DPG_ACTOR_TRAINING and steps > self.parameters.AC_ACTOR_TRAINING_START and \
-                    (steps > self.parameters.DPG_CACLA_STEPS or steps <= self.parameters.DPG_DPG_STEPS):
+            if self.parameters.DPG_USE_DPG_ACTOR_TRAINING and step > self.parameters.AC_ACTOR_TRAINING_START and \
+                    (step > self.parameters.DPG_CACLA_STEPS or step <= self.parameters.DPG_DPG_STEPS):
                 self.train_actor_DPG(batch)
-            if (self.parameters.DPG_USE_CACLA or steps < self.parameters.DPG_CACLA_STEPS\
-                    or steps > self.parameters.DPG_DPG_STEPS) and steps > self.parameters.AC_ACTOR_TRAINING_START:
+            if (self.parameters.DPG_USE_CACLA or step < self.parameters.DPG_CACLA_STEPS\
+                    or step > self.parameters.DPG_DPG_STEPS) and step > self.parameters.AC_ACTOR_TRAINING_START:
                 priorities = self.train_actor_batch(batch, priorities)
         else:
             if self.parameters.OCACLA_ENABLED:
@@ -701,16 +632,25 @@ class ActorCritic(object):
 
     def train_actor_DPG(self, batch):
         batch_len = len(batch[0])
-        inputs = numpy.zeros((batch_len, self.parameters.STATE_REPR_LEN))
+        # TODO: Can probably remove this kind of if statements by making non-cnn use the same list
+        # concatenation as cnn currently uses
+        if self.parameters.CNN_REPR:
+            inputShape = numpy.array([batch_len] + list(self.input_len))
+            inputs = numpy.zeros(inputShape)
+        else:
+            inputs = numpy.zeros((batch_len, self.input_len))
         targets = numpy.zeros((batch_len, 1))
         importance_weights = batch[5] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else numpy.ones(batch_len)
-
-
+    
         # Calculate input and target for actor
         for sample_idx in range(batch_len):
             old_s, a, r, new_s = batch[0][sample_idx], batch[1][sample_idx], batch[2][sample_idx], batch[3][
                 sample_idx]
-            oldPrediction = self.combinedActorCritic.predict(old_s)[0]
+            # TODO: dunno why this if statement is needs. AC-Combo has same input dims as Actor in non-cnn, but not in cnn???????
+            if self.parameters.CNN_REPR:
+                oldPrediction = self.combinedActorCritic.predict(numpy.array([old_s]))[0]
+            else:
+                oldPrediction = self.combinedActorCritic.predict(old_s)[0]
             inputs[sample_idx] = old_s
             targets[sample_idx] = oldPrediction + self.parameters.DPG_Q_VAL_INCREASE
 
@@ -723,11 +663,8 @@ class ActorCritic(object):
         batch_len = len(batch[0])
         len_output = self.actor.num_outputs
         if self.parameters.CNN_REPR:
-            inputShape = numpy.array([batch_len] + list(self.input_len[0]))
+            inputShape = numpy.array([batch_len] + list(self.input_len))
             inputs = numpy.zeros(inputShape)
-            if self.parameters.EXTRA_INPUT:
-                extraInput = numpy.zeros((batch_len, self.input_len[1]))
-                inputs = [inputs, extraInput]
         else:
             inputs = numpy.zeros((batch_len, self.input_len))
         targets = numpy.zeros((batch_len, len_output))
@@ -750,11 +687,7 @@ class ActorCritic(object):
             target = self.calculateTarget_Actor(old_s, a, td_e)
 
             if target is not None and sample_weight != 0:
-                if self.parameters.CNN_REPR and self.parameters.EXTRA_INPUT:
-                    inputs[0][pos_tde_count] = old_s[0]
-                    inputs[1][pos_tde_count] = old_s[1]
-                else:
-                    inputs[pos_tde_count] = old_s
+                inputs[pos_tde_count] = old_s
                 targets[pos_tde_count] = target
                 used_imp_weights[pos_tde_count] = sample_weight
                 pos_tde_count += 1
@@ -782,15 +715,10 @@ class ActorCritic(object):
                     trainInputs = inputs[:training_this_epoch]
                     trainTargets = targets[:training_this_epoch]
                     train_used_imp_weights = used_imp_weights[:training_this_epoch]
-                    print(numpy.shape(trainInputs))
                     self.actor.train(trainInputs, trainTargets, train_used_imp_weights)
         else:
             if pos_tde_count > 0:
-                if self.parameters.CNN_REPR and self.parameters.EXTRA_INPUT:
-                    inputs[0] = inputs[0][:pos_tde_count]
-                    inputs[1] = inputs[1][:pos_tde_count]
-                else:
-                    inputs = inputs[:pos_tde_count]
+                inputs = inputs[:pos_tde_count]
                 targets = targets[:pos_tde_count]
                 used_imp_weights = used_imp_weights[:pos_tde_count]
                 self.actor.train(inputs, targets, used_imp_weights)
@@ -899,7 +827,7 @@ class ActorCritic(object):
         return action, noisyAction
 
     def calculateTargetAndTDE(self, old_s, r, new_s, alive, a):
-        if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+        if self.parameters.ALGORITHM == "DPG":
             old_state_value = self.critic.predict(old_s, numpy.array([a]))
         else:
             old_state_value = self.critic.predict(old_s)
@@ -907,7 +835,7 @@ class ActorCritic(object):
         target = r
         if alive:
             # The target is the reward plus the discounted prediction of the value network
-            if self.parameters.ACTOR_CRITIC_TYPE == "DPG":
+            if self.parameters.ALGORITHM == "DPG":
                 updated_prediction = self.critic.predict_target_model(new_s, numpy.array([a]))
             else:
                 updated_prediction = self.critic.predict_target_model(new_s)
@@ -918,7 +846,11 @@ class ActorCritic(object):
 
     def train_critic_DPG(self, batch, get_evals = False):
         batch_len = len(batch[0])
-        inputs_critic_states = numpy.zeros((batch_len, self.input_len))
+        if self.parameters.CNN_REPR:
+            inputShape = numpy.array([batch_len] + list(self.input_len))
+            inputs_critic_states = numpy.zeros(inputShape)
+        else:
+            inputs_critic_states = numpy.zeros((batch_len, self.input_len))
         inputs_critic_actions = numpy.zeros((batch_len, self.action_len))
         targets_critic = numpy.zeros((batch_len, 1))
         idxs = batch[6] if self.parameters.PRIORITIZED_EXP_REPLAY_ENABLED else None
@@ -957,14 +889,9 @@ class ActorCritic(object):
 
     def train_critic(self, batch, off_policy_weights=None):
         batch_len = len(batch[0])
-
         if self.parameters.CNN_REPR:
-            inputShape = numpy.array([batch_len] + [self.input_len[0]])
+            inputShape = numpy.array([batch_len] + list(self.input_len))
             inputs_critic = numpy.zeros(inputShape)
-            print(inputs_critic.shape)
-            if self.parameters.EXTRA_INPUT:
-                extraInput = numpy.zeros((batch_len, self.input_len[1]))
-                inputs_critic = [inputs_critic, extraInput]
         else:
             inputs_critic = numpy.zeros((batch_len, self.input_len))
         targets_critic = numpy.zeros((batch_len, 1))
@@ -984,20 +911,13 @@ class ActorCritic(object):
                 alive = new_s is not None
             target, td_e = self.calculateTargetAndTDE(old_s, r, new_s, alive, a)
             priorities[sample_idx] = td_e
-            if self.parameters.CNN_REPR and self.parameters.EXTRA_INPUT:
-                inputs_critic[0][sample_idx] = old_s[0]
-                inputs_critic[1][sample_idx] = old_s[1]
-            elif self.parameters.CNN_REPR:
-                inputs_critic[:,:,sample_idx] = old_s
-            else:
-                inputs_critic[sample_idx] = old_s
+            inputs_critic[sample_idx] = old_s
             targets_critic[sample_idx] = target
 
         # Train:
         self.critic.train(inputs_critic, targets_critic, importance_weights)
 
         return idxs, priorities
-
 
 
     def calculateTarget_Actor(self, old_s, a, td_e):
@@ -1037,12 +957,18 @@ class ActorCritic(object):
     def getNetworkWeights(self):
         weightDict = {}
         for networkName in self.networks:
-            weightDict[networkName] = self.networks[networkName].getNetwork().get_weights()
+            if networkName == "Actor-Critic-Combo":
+                weightDict[networkName] = self.networks[networkName].get_weights()
+            else:
+                weightDict[networkName] = self.networks[networkName].getNetwork().get_weights()
         return weightDict
 
     def setNetworkWeights(self, weightDict):
         for weightName in weightDict:
-            self.networks[weightName].getNetwork().set_weights(weightDict[weightName])
+            if weightName == "Actor-Critic-Combo":
+                self.networks[weightName].set_weights(weightDict[weightName])
+            else:
+                self.networks[weightName].getNetwork().set_weights(weightDict[weightName])
 
     def getTemperature(self):
         return None
