@@ -30,7 +30,38 @@ class ValueNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                pass
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
 
@@ -161,10 +192,41 @@ class PolicyNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                pass
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
-                self.num_outputs = env.action_space.n
+            self.num_outputs = env.action_space.n
 
         if modelName is not None:
             self.load(modelName)
@@ -270,14 +332,41 @@ class ActionValueNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                print("This environment does not work with CNNs")
-                quit()
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
-                self.num_outputs = env.action_space.n
-                print(self.stateReprLen)
-                print(self.num_outputs)
-
+            self.num_actions_inputs = env.action_space.n
 
         if modelName is not None:
             self.load(modelName)
@@ -371,6 +460,7 @@ class ActorCritic(object):
         self.counts = [] # For SPG/CACLA: count how much actor training we do each step
         self.caclaVar = parameters.CACLA_VAR_START
         self.input = None
+        self.numCNNlayers = 0
 
         if self.parameters.GAME_NAME == "Agar.io":
             self.action_len = 2 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT
@@ -400,22 +490,56 @@ class ActorCritic(object):
                 else:
                     channels = self.parameters.NUM_OF_GRIDS
                     if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
                         self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
                                           self.parameters.CNN_INPUT_DIM_1)
                     elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
                         self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
                                           self.parameters.CNN_INPUT_DIM_2)
                     else:
+                        self.numCNNlayers = 3
                         self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
                                           self.parameters.CNN_INPUT_DIM_3)
         else:
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                pass
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.input_len = env.observation_space.shape[0]
-            self.output_len = env.action_space.n
+            self.action_len = env.action_space.n
      
         # Bookkeeping:
         self.latestTDerror = None
@@ -425,7 +549,7 @@ class ActorCritic(object):
         self.combinedActorCritic = None
 
     def createCombinedActorCritic(self, actor, critic):
-        for layer in critic.model.layers:
+        for layer in critic.model.layers[self.numCNNlayers+1:]:
             layer.trainable = False
         #mergeLayer = keras.layers.concatenate([actor.inputs[0], actor.outputs[0]])
         nonTrainableCritic = critic.model([actor.model.inputs[0], actor.model.outputs[0]])
@@ -533,16 +657,21 @@ class ActorCritic(object):
             conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
                           strides=(kernel_1[1], kernel_1[1]), activation='relu',
                           data_format=data_format)(conv)
+            self.numCNNlayers += 1
         if self.parameters.CNN_USE_L2:
             conv = Conv2D(kernel_2[2], kernel_size=(kernel_2[0], kernel_2[0]),
                           strides=(kernel_2[1], kernel_2[1]), activation='relu',
                           data_format=data_format)(conv)
+            self.numCNNlayers += 1
+
         if self.parameters.CNN_USE_L3:
             conv = Conv2D(kernel_3[2], kernel_size=(kernel_3[0], kernel_3[0]),
                           strides=(kernel_3[1], kernel_3[1]), activation='relu',
                           data_format=data_format)(conv)
+            self.numCNNlayers += 1
 
         cnnLayers = Flatten()(conv)
+        self.numCNNlayers += 1
         return cnnLayers, cnnInput
 
     def updateNoise(self):

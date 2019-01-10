@@ -210,7 +210,7 @@ CNN_L3 = (3, 1, 64)
 CNN_INPUT_DIM_3 = 42
 
 # Pixel representation
-CNN_P_REPR = False if CNN_REPR else False
+CNN_P_REPR = True if CNN_REPR else False
 CNN_P_RGB = False if CNN_P_REPR else False
 CNN_P_INCEPTION = False
 CNN_LAST_GRID = False

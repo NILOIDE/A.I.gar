@@ -19,6 +19,7 @@ from builtins import input
 import multiprocessing as mp
 from time import sleep
 import gym
+# import cv2
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
@@ -796,8 +797,14 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
 
     # Move collector forward to decorrelate (to break correlations between game stage across collectors)
     print("Desynchronizing worker #" + str(processNum) + "...")
-    observation = env.reset()
-    observation = np.array([observation])
+    if parameters.CNN_REPR:
+        env.reset()
+        observation = env.render(mode='rgb_array')
+        size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+        observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+    else:
+        observation = np.array([env.reset()])
+        
     step = 0
     for i in range((processNum-1) * 100):
         if guiEnabled and processInGUISet:
@@ -807,12 +814,22 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
             actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
-        observation = np.array([observation])
+        if parameters.CNN_REPR:
+            observation = env.render(mode='rgb_array')
+            size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+            observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+        else:
+            observation = np.array([observation])
         step += 1
         if done:
             reward = -1
-            observation = env.reset()
-            observation = np.array([observation])
+            if parameters.CNN_REPR:
+                env.reset()
+                observation = env.render(mode='rgb_array')
+                size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+                observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+            else:
+                observation = np.array([env.reset()])
             step = 0
     print("Finished desynchronizing worker #" + str(processNum) + ".")
     events[processNum].set()
@@ -820,7 +837,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
 
     # Run game until terminated
     while True:
-        actionIdx, action = learningAlg.decideMove(observation)
+        # actionIdx, action = learningAlg.decideMove(observation)
         actionIdx, action = learningAlg.decideMove(observation)
         if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
             actionIdx = np.argmax(action)
@@ -1083,10 +1100,18 @@ def cartPoleTest(alg, path, name, parameters):
                 values = network.predict_action(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
                 row.append(values[np.argmax(values)])
 
-            elif parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
+            elif parameters.ALGORITHM == "CACLA":
                 network = alg.getNetworks()["V(S)"]
                 value = network.predict(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
                 row.append(value)
+                
+            elif parameters.ALGORITHM == "DPG":
+                network = alg.getNetworks()["Q(S,A)"]
+                state = np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]])
+                action = np.array([[0.0, 0.0]])
+                value = network.predict(state,action)
+                row.append(value)
+                
             else:
                 print("You w0t m8?")
                 quit()
