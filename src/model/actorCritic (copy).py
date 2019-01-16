@@ -12,54 +12,8 @@ def relu_max(x):
     return K.relu(x, max_value=1)
 
 
-def CNN_state_repr_len(parameters):
-    if parameters.CNN_P_REPR:
-        if parameters.CNN_P_RGB:
-            channels = 3
-        # GrayScale
-        else:
-            channels = 1
-        if parameters.CNN_LAST_GRID:
-            channels = channels * 2
-
-        if parameters.CNN_USE_L1:
-            return (parameters.CNN_INPUT_DIM_1,
-                                 parameters.CNN_INPUT_DIM_1, channels)
-        elif parameters.CNN_USE_L2:
-            return (parameters.CNN_INPUT_DIM_2,
-                                 parameters.CNN_INPUT_DIM_2, channels)
-        else:
-            return (parameters.CNN_INPUT_DIM_3,
-                                 parameters.CNN_INPUT_DIM_3, channels)
-    else:
-        channels = parameters.NUM_OF_GRIDS
-        if parameters.CNN_USE_L1:
-            return (channels, parameters.CNN_INPUT_DIM_1,
-                                 parameters.CNN_INPUT_DIM_1)
-        elif parameters.CNN_USE_L2:
-            return (channels, parameters.CNN_INPUT_DIM_2,
-                                 parameters.CNN_INPUT_DIM_2)
-        else:
-            return (channels, parameters.CNN_INPUT_DIM_3,
-                                 parameters.CNN_INPUT_DIM_3)
-
-
-def CNN_num_conv_layers(parameters):
-    if not parameters.CNN_REPR:
-        return 0
-
-    num_conv_layers = 0
-    if parameters.CNN_USE_L1:
-        num_conv_layers += 1
-    if parameters.CNN_USE_L2:
-        num_conv_layers += 1
-    if parameters.CNN_USE_L3:
-        num_conv_layers += 1
-    return num_conv_layers
-
-
 class ValueNetwork(object):
-    def __init__(self, parameters, modelName):
+    def __init__(self, parameters, modelName, cnnLayers=None, cnnInput=None):
         self.parameters = parameters
         self.loadedModelName = None
 
@@ -69,30 +23,54 @@ class ValueNetwork(object):
         self.activationFuncHidden = self.parameters.ACTIVATION_FUNC_HIDDEN
         self.activationFuncOutput = self.parameters.ACTIVATION_FUNC_OUTPUT
 
+        self.layers = parameters.CACLA_CRITIC_LAYERS
+        self.input = None
+        
         if self.parameters.GAME_NAME == "Agar.io":
-            if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
-            else:
-                self.stateReprLen = self.parameters.STATE_REPR_LEN
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
         else:
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
 
         if modelName is not None:
             self.load(modelName)
-        else:
-            self.input, self.model, self.target_model = self.createNetwork()
-        optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
-        self.model.compile(loss='mse', optimizer=optimizer)
-        self.target_model.compile(loss='mse', optimizer=optimizer)
+            return
 
-    def createNetwork(self):
         if self.parameters.INITIALIZER == "glorot_uniform":
             initializer = keras.initializers.glorot_uniform()
         elif self.parameters.INITIALIZER == "glorot_normal":
@@ -101,42 +79,16 @@ class ValueNetwork(object):
             weight_initializer_range = math.sqrt(6 / (self.stateReprLen + 1))
             initializer = keras.initializers.RandomUniform(minval=-weight_initializer_range,
                                                            maxval=weight_initializer_range, seed=None)
+
         regularizer = keras.regularizers.l2(self.parameters.CACLA_CRITIC_WEIGHT_DECAY)
+        layerIterable = iter(self.layers)
+
         if self.parameters.CNN_REPR:
-            # Pixel input
-            if self.parameters.CNN_P_REPR:
-                data_format = 'channels_last'
-            # Not pixel input
-            else:
-                data_format = 'channels_first'
-            # (KernelSize, stride, filterNum)
-            kernel_1 = self.parameters.CNN_L1
-            kernel_2 = self.parameters.CNN_L2
-            kernel_3 = self.parameters.CNN_L3
-
-            net_input = Input(shape=self.stateReprLen)
-            conv = net_input
-            if self.parameters.CNN_USE_L1:
-                conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
-                              strides=(kernel_1[1], kernel_1[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L2:
-                conv = Conv2D(kernel_2[2], kernel_size=(kernel_2[0], kernel_2[0]),
-                              strides=(kernel_2[1], kernel_2[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L3:
-                conv = Conv2D(kernel_3[2], kernel_size=(kernel_3[0], kernel_3[0]),
-                              strides=(kernel_3[1], kernel_3[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            previousLayer = Flatten()(conv)
+            self.input = cnnInput
+            previousLayer = cnnLayers
         else:
-            net_input = keras.layers.Input((self.stateReprLen,))
-            previousLayer = net_input
-
-        layerIterable = iter(self.parameters.CACLA_CRITIC_LAYERS)
+            self.input = keras.layers.Input((self.stateReprLen,))
+            previousLayer = self.input
 
         for layer in layerIterable:
             if layer > 0:
@@ -149,10 +101,16 @@ class ValueNetwork(object):
         output = Dense(1, activation="linear", bias_initializer=initializer, kernel_initializer=initializer,
                        kernel_regularizer=regularizer)(previousLayer)
 
-        model = Model(inputs=net_input, outputs=output)
-        target_model = keras.models.clone_model(model)
-        target_model.set_weights(model.get_weights())
-        return net_input, model, target_model
+        self.model = Model(inputs=self.input, outputs=output)
+
+
+        optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
+
+        self.target_model = keras.models.clone_model(self.model)
+        self.target_model.set_weights(self.model.get_weights())
+
+        self.model.compile(loss='mse', optimizer=optimizer)
+        self.target_model.compile(loss='mse', optimizer=optimizer)
 
     def load(self, modelName=None):
         if modelName is not None:
@@ -206,16 +164,9 @@ class ValueNetwork(object):
     def getNetwork(self):
         return self.model
 
-    def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
-
-    def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
-
 
 class PolicyNetwork(object):
-    def __init__(self, parameters, modelName):
+    def __init__(self, parameters, modelName, cnnLayers=None, cnnInput=None):
         self.parameters = parameters
         self.loadedModelName = None
 
@@ -233,11 +184,7 @@ class PolicyNetwork(object):
         self.input = None
         
         if self.parameters.GAME_NAME == "Agar.io":
-            if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
-            else:
-                self.stateReprLen = self.parameters.STATE_REPR_LEN
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
             self.num_outputs = 2  #x, y, split, eject all continuous between 0 and 1
             if self.parameters.ENABLE_SPLIT:
                 self.num_outputs += 1
@@ -247,18 +194,77 @@ class PolicyNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
             self.num_outputs = env.action_space.n
         if modelName is not None:
             self.load(modelName)
         else:
-            self.input, self.model, self.target_model = self.createNetwork()
+            if self.parameters.INITIALIZER == "glorot_uniform":
+                initializer = keras.initializers.glorot_uniform()
+            elif self.parameters.INITIALIZER == "glorot_normal":
+                initializer = keras.initializers.glorot_normal()
+            else:
+                weight_initializer_range = math.sqrt(6 / (self.stateReprLen + 1))
+                initializer = keras.initializers.RandomUniform(minval=-weight_initializer_range,
+                                                               maxval=weight_initializer_range, seed=None)
+    
+            layerIterable = iter(self.layers)
+    
+            if self.parameters.CNN_REPR:
+                self.input = cnnInput
+                previousLayer = cnnLayers
+            else:
+                self.input = keras.layers.Input((self.stateReprLen,))
+                previousLayer = self.input
+    
+            for neuronNumber in layerIterable:
+                if neuronNumber > 0:
+                    previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
+                                          kernel_initializer=initializer)(previousLayer)
+    
+    
+            output = Dense(self.num_outputs, activation="sigmoid", bias_initializer=initializer,
+                           kernel_initializer=initializer)(previousLayer)
+    
+            self.model = keras.models.Model(inputs=self.input, outputs=output)
             
         self.optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
         # self.optimizer = self.createOptimizer()
+        self.target_model = keras.models.clone_model(self.model)
+        self.target_model.set_weights(self.model.get_weights())
         self.model.compile(loss='mse', optimizer=self.optimizer)
         self.target_model.compile(loss='mse', optimizer=self.optimizer)
 
@@ -269,71 +275,11 @@ class PolicyNetwork(object):
     #     grads = list(grads)[1:]
     #     return K.function([self.model.input, action_gdts], [tf.train.AdamOptimizer(self.parameters.DPG_CRITIC_ALPHA).apply_gradients(grads)])
 
-    def createNetwork(self):
-        if self.parameters.INITIALIZER == "glorot_uniform":
-            initializer = keras.initializers.glorot_uniform()
-        elif self.parameters.INITIALIZER == "glorot_normal":
-            initializer = keras.initializers.glorot_normal()
-        else:
-            weight_initializer_range = math.sqrt(6 / (self.stateReprLen + 1))
-            initializer = keras.initializers.RandomUniform(minval=-weight_initializer_range,
-                                                           maxval=weight_initializer_range, seed=None)
-
-        layerIterable = iter(self.layers)
-
-        if self.parameters.CNN_REPR:
-            # Pixel input
-            if self.parameters.CNN_P_REPR:
-                data_format = 'channels_last'
-            # Not pixel input
-            else:
-                data_format = 'channels_first'
-            # (KernelSize, stride, filterNum)
-            kernel_1 = self.parameters.CNN_L1
-            kernel_2 = self.parameters.CNN_L2
-            kernel_3 = self.parameters.CNN_L3
-
-            net_input = Input(shape=self.stateReprLen)
-            conv = net_input
-            if self.parameters.CNN_USE_L1:
-                conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
-                              strides=(kernel_1[1], kernel_1[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L2:
-                conv = Conv2D(kernel_2[2], kernel_size=(kernel_2[0], kernel_2[0]),
-                              strides=(kernel_2[1], kernel_2[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L3:
-                conv = Conv2D(kernel_3[2], kernel_size=(kernel_3[0], kernel_3[0]),
-                              strides=(kernel_3[1], kernel_3[1]), activation=self.activationFuncHidden,
-                              kernel_initializer=initializer, bias_initializer=initializer,
-                              data_format=data_format)(conv)
-            previousLayer = Flatten()(conv)
-        else:
-            net_input = keras.layers.Input((self.stateReprLen,))
-            previousLayer = net_input
-
-        for neuronNumber in layerIterable:
-            if neuronNumber > 0:
-                previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
-                                      kernel_initializer=initializer)(previousLayer)
-
-        output = Dense(self.num_outputs, activation="sigmoid", bias_initializer=initializer,
-                       kernel_initializer=initializer)(previousLayer)
-
-        model = keras.models.Model(inputs=net_input, outputs=output)
-        target_model = keras.models.clone_model(model)
-        target_model.set_weights(model.get_weights())
-        return net_input, model, target_model
-
     def load(self, modelName=None):
         if modelName is not None:
             path = modelName
             self.loadedModelName = modelName
             self.model = load_model(path + "actor_model.h5")
-            self.target_model = load_model(path + "actor_model.h5")
 
     def predict(self, state):
         if self.parameters.CNN_REPR:
@@ -375,16 +321,9 @@ class PolicyNetwork(object):
     def getNetwork(self):
         return self.model
 
-    def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
-
-    def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
-
 
 class ActionValueNetwork(object):
-    def __init__(self, parameters, modelName):
+    def __init__(self, parameters, modelName, cnnLayers=None, cnnInput=None):
         self.ornUhlPrev = 0
         self.parameters = parameters
         self.loadedModelName = None
@@ -394,11 +333,7 @@ class ActionValueNetwork(object):
         self.layers = self.parameters.DPG_CRITIC_LAYERS
 
         if self.parameters.GAME_NAME == "Agar.io":
-            if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
-            else:
-                self.stateReprLen = self.parameters.STATE_REPR_LEN
+            self.stateReprLen = self.parameters.STATE_REPR_LEN
             self.num_actions_inputs = 2  # x, y, split, eject all continuous between 0 and 1
             if self.parameters.ENABLE_SPLIT:
                 self.num_actions_inputs += 1
@@ -408,8 +343,38 @@ class ActionValueNetwork(object):
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.stateReprLen = CNN_state_repr_len(self.parameters)
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.stateReprLen = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.stateReprLen = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
             self.num_actions_inputs = env.action_space.n
@@ -417,68 +382,38 @@ class ActionValueNetwork(object):
         if modelName is not None:
             self.load(modelName)
         else:
-            self.inputAction, self.inputAction, self.model, self.target_model = self.createNetwork()
-
+            
+            initializer = keras.initializers.glorot_uniform()
+            regularizer = keras.regularizers.l2(self.parameters.DPG_CRITIC_WEIGHT_DECAY)
+    
+            layerIterable = enumerate(self.layers)
+            self.inputAction = keras.layers.Input((self.num_actions_inputs,))
+    
+            if self.parameters.CNN_REPR:
+                self.inputState = cnnInput
+                previousLayer = cnnLayers
+            else:
+                self.inputState = keras.layers.Input((self.stateReprLen,))
+                previousLayer = self.inputState
+    
+            for idx, neuronNumber in layerIterable:
+                if idx == parameters.DPG_FEED_ACTION_IN_LAYER - 1:
+                    mergeLayer = keras.layers.concatenate([previousLayer, self.inputAction])
+                    previousLayer = mergeLayer
+                previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
+                                      kernel_initializer=initializer, kernel_regularizer=regularizer)(previousLayer)
+    
+            output = Dense(1, activation="linear", bias_initializer=initializer, kernel_initializer=initializer,
+                           kernel_regularizer=regularizer)(previousLayer)
+            self.model = keras.models.Model(inputs=[self.inputState, self.inputAction], outputs=output)
         optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
+        self.target_model = keras.models.clone_model(self.model)
+        self.target_model.set_weights(self.model.get_weights())
         self.model.compile(loss='mse', optimizer=optimizer)
         self.target_model.compile(loss='mse', optimizer=optimizer)
         self.q_gradient_function = K.function([self.model.input[0], self.model.input[1]],
                                         K.gradients(self.model.output, [self.model.input[1]]))
 
-
-    def createNetwork(self):
-        initializer = keras.initializers.glorot_uniform()
-        regularizer = keras.regularizers.l2(self.parameters.DPG_CRITIC_WEIGHT_DECAY)
-
-        layerIterable = enumerate(self.layers)
-        inputAction = keras.layers.Input((self.num_actions_inputs,))
-
-        if self.parameters.CNN_REPR:
-            # Pixel input
-            if self.parameters.CNN_P_REPR:
-                data_format = 'channels_last'
-            # Not pixel input
-            else:
-                data_format = 'channels_first'
-            # (KernelSize, stride, filterNum)
-            kernel_1 = self.parameters.CNN_L1
-            kernel_2 = self.parameters.CNN_L2
-            kernel_3 = self.parameters.CNN_L3
-
-            inputState = Input(shape=self.stateReprLen)
-            conv = inputState
-            if self.parameters.CNN_USE_L1:
-                conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
-                              strides=(kernel_1[1], kernel_1[1]), activation='relu',
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L2:
-                conv = Conv2D(kernel_2[2], kernel_size=(kernel_2[0], kernel_2[0]),
-                              strides=(kernel_2[1], kernel_2[1]), activation='relu',
-                              data_format=data_format)(conv)
-            if self.parameters.CNN_USE_L3:
-                conv = Conv2D(kernel_3[2], kernel_size=(kernel_3[0], kernel_3[0]),
-                              strides=(kernel_3[1], kernel_3[1]), activation='relu',
-                              data_format=data_format)(conv)
-            previousLayer = Flatten()(conv)
-        else:
-            inputState = keras.layers.Input((self.stateReprLen,))
-            previousLayer = inputState
-
-        for idx, neuronNumber in layerIterable:
-            if idx == self.parameters.DPG_FEED_ACTION_IN_LAYER - 1:
-                mergeLayer = keras.layers.concatenate([previousLayer, inputAction])
-                previousLayer = mergeLayer
-            previousLayer = Dense(neuronNumber, activation=self.activationFuncHidden, bias_initializer=initializer,
-                                  kernel_initializer=initializer, kernel_regularizer=regularizer)(previousLayer)
-
-        output = Dense(1, activation="linear", bias_initializer=initializer, kernel_initializer=initializer,
-                       kernel_regularizer=regularizer)(previousLayer)
-        model = keras.models.Model(inputs=[inputState, inputAction], outputs=output)
-
-        target_model = keras.models.clone_model(model)
-        target_model.set_weights(model.get_weights())
-
-        return inputAction, inputState, model, target_model
 
     def load(self, modelName=None):
         if modelName is not None:
@@ -486,22 +421,27 @@ class ActionValueNetwork(object):
             self.loadedModelName = modelName
             self.model = load_model(path + "actionValue_model.h5")
             self.target_model = load_model(path + "actionValue_model.h5")
+            
 
     def predict(self, state, action):
         if self.parameters.CNN_REPR:
             state = numpy.array([state])
         return self.model.predict([state, action])[0][0]
+    
 
     def predict_target_model(self, state, action):
         if self.parameters.CNN_REPR:
             state = numpy.array([state])
         return self.target_model.predict([state, action])[0][0]
     
+    
     def gradient(self, state, action):
         return self.q_gradient_function([state, action])[0]
     
+    
     def update_target_model(self):
         self.target_model.set_weights(self.model.get_weights())
+        
 
     def softlyUpdateTargetModel(self):
         tau = self.parameters.DPG_TAU
@@ -509,27 +449,24 @@ class ActionValueNetwork(object):
         modelWeights = self.model.get_weights()
         newWeights = [targetWeights[idx] * (1 - tau) + modelWeights[idx] * tau for idx in range(len(modelWeights))]
         self.target_model.set_weights(newWeights)
+        
 
     def train(self, inputs, targets, importance_weights):
         self.model.train_on_batch(inputs, targets, sample_weight=importance_weights)
+
 
     def save(self, path, name):
         self.target_model.set_weights(self.model.get_weights())
         self.target_model.save(path + name + "actionValue_model.h5")
 
+
     def getNetwork(self):
         return self.model
-
+    
+    
     def getTargetNetwork(self):
         return self.target_model
-
-    def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
-
-    def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
-
+    
     
 class ActorCritic(object):
     def __repr__(self):
@@ -553,17 +490,78 @@ class ActorCritic(object):
         if self.parameters.GAME_NAME == "Agar.io":
             self.action_len = 2 + self.parameters.ENABLE_SPLIT + self.parameters.ENABLE_EJECT
             self.ornUhlPrev = numpy.zeros(self.action_len)
+            self.input_len = parameters.STATE_REPR_LEN
+
+            # CNN stuff:
             if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.input_len = CNN_state_repr_len(self.parameters)
-            else:
-                self.input_len = parameters.STATE_REPR_LEN
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
         else:
             import gym
             env = gym.make(self.parameters.GAME_NAME)
             if self.parameters.CNN_REPR:
-                self.num_cnn_layers = CNN_num_conv_layers(self.parameters)
-                self.input_len = CNN_state_repr_len(self.parameters)
+                if self.parameters.CNN_P_REPR:
+                    if self.parameters.CNN_P_RGB:
+                        channels = 3
+                    # GrayScale
+                    else:
+                        channels = 1
+                    if self.parameters.CNN_LAST_GRID:
+                        channels = channels * 2
+    
+                    if self.parameters.CNN_USE_L1:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1, channels)
+                    elif self.parameters.CNN_USE_L2:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2, channels)
+                    else:
+                        self.input_len = (self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3, channels)
+                else:
+                    channels = self.parameters.NUM_OF_GRIDS
+                    if self.parameters.CNN_USE_L1:
+                        self.numCNNlayers = 1
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_1,
+                                          self.parameters.CNN_INPUT_DIM_1)
+                    elif self.parameters.CNN_USE_L2:
+                        self.numCNNlayers = 2
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_2,
+                                          self.parameters.CNN_INPUT_DIM_2)
+                    else:
+                        self.numCNNlayers = 3
+                        self.input_len = (channels, self.parameters.CNN_INPUT_DIM_3,
+                                          self.parameters.CNN_INPUT_DIM_3)
             else:
                 self.input_len = env.observation_space.shape[0]
             self.action_len = env.action_space.n
@@ -596,21 +594,25 @@ class ActorCritic(object):
 
     def createNetwork(self):
         networks = {}
+        cnnLayers = None
+        cnnInput = None
+        if self.parameters.CNN_REPR:
+            cnnLayers, cnnInput = self.createSharedCNN()
         if self.parameters.ALGORITHM == "DPG":
-            self.actor = PolicyNetwork(self.parameters, None)
-            self.critic = ActionValueNetwork(self.parameters, None)
+            self.actor = PolicyNetwork(self.parameters, None, cnnLayers, cnnInput)
+            self.critic = ActionValueNetwork(self.parameters, None, cnnLayers, cnnInput)
             # self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
             networks["MU(S)"] = self.actor
             networks["Q(S,A)"] = self.critic
             # networks["Actor-Critic-Combo"] = self.combinedActorCritic
         else:
-            self.actor = PolicyNetwork(self.parameters, None)
+            self.actor = PolicyNetwork(self.parameters, None, cnnLayers, cnnInput)
             networks["MU(S)"] = self.actor
             if self.parameters.OCACLA_ENABLED:
-                self.critic = ActionValueNetwork(self.parameters, None)
+                self.critic = ActionValueNetwork(self.parameters, None, cnnLayers, cnnInput)
                 networks["Q(S,A)"] = self.critic
             else:
-                self.critic = ValueNetwork(self.parameters, None)
+                self.critic = ValueNetwork(self.parameters, None, cnnLayers, cnnInput)
                 networks["V(S)"] = self.critic
         self.networks = networks
 
@@ -619,21 +621,25 @@ class ActorCritic(object):
         if networks is None or networks == {}:
             if networks is None:
                 networks = {}
+            cnnLayers = None
+            cnnInput = None
+            if self.parameters.CNN_REPR:
+                cnnLayers, cnnInput = self.createSharedCNN()
             if self.parameters.ALGORITHM == "DPG":
-                self.actor = PolicyNetwork(self.parameters, loadPath)
-                self.critic = ActionValueNetwork(self.parameters, loadPath)
+                self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
+                self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 # self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
                 networks["MU(S)"] = self.actor
                 networks["Q(S,A)"] = self.critic
                 # networks["Actor-Critic-Combo"] = self.combinedActorCritic
             else:
-                self.actor = PolicyNetwork(self.parameters, loadPath)
+                self.actor = PolicyNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                 networks["MU(S)"] = self.actor
                 if self.parameters.OCACLA_ENABLED:
-                    self.critic = ActionValueNetwork(self.parameters, loadPath)
+                    self.critic = ActionValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                     networks["Q(S,A)"] = self.critic
                 else:
-                    self.critic = ValueNetwork(self.parameters, loadPath)
+                    self.critic = ValueNetwork(self.parameters, loadPath, cnnLayers, cnnInput)
                     networks["V(S)"] = self.critic
         else:
             self.actor  = networks["MU(S)"]
@@ -654,11 +660,45 @@ class ActorCritic(object):
         self.networks = networks
         return networks
 
+    def createSharedCNN(self):
+        # (KernelSize, stride, filterNum)
+        kernel_1 = self.parameters.CNN_L1
 
-    def updateSharedLayers(self, updated_net, outdated_net):
-        new_w = updated_net.get_conv_layer_weights()
-        outdated_net.set_conv_layer_weights(new_w)
+        kernel_2 = self.parameters.CNN_L2
 
+        kernel_3 = self.parameters.CNN_L3
+
+        # Pixel input
+        if self.parameters.CNN_P_REPR:
+            data_format = 'channels_last'
+        # Not pixel input
+        else:
+            data_format = 'channels_first'
+
+        input_len = self.input_len
+
+        cnnInput = Input(shape=input_len)
+        conv = cnnInput
+        if self.parameters.CNN_USE_L1:
+            conv = Conv2D(kernel_1[2], kernel_size=(kernel_1[0], kernel_1[0]),
+                          strides=(kernel_1[1], kernel_1[1]), activation='relu',
+                          data_format=data_format)(conv)
+            self.numCNNlayers += 1
+        if self.parameters.CNN_USE_L2:
+            conv = Conv2D(kernel_2[2], kernel_size=(kernel_2[0], kernel_2[0]),
+                          strides=(kernel_2[1], kernel_2[1]), activation='relu',
+                          data_format=data_format)(conv)
+            self.numCNNlayers += 1
+
+        if self.parameters.CNN_USE_L3:
+            conv = Conv2D(kernel_3[2], kernel_size=(kernel_3[0], kernel_3[0]),
+                          strides=(kernel_3[1], kernel_3[1]), activation='relu',
+                          data_format=data_format)(conv)
+            self.numCNNlayers += 1
+
+        cnnLayers = Flatten()(conv)
+        self.numCNNlayers += 1
+        return cnnLayers, cnnInput
 
     def updateNoise(self):
         self.std *= self.noise_decay_factor
@@ -734,7 +774,11 @@ class ActorCritic(object):
             else:
                 # off_policy_weights = self.apply_off_policy_corrections_cacla(batch)
                 # idxs, priorities = self.train_critic(batch, off_policy_weights)
+                # m = hashlib.md5(str(self.actor.getNetwork().get_weights()).encode('utf-8'))
+                # print("1 weights hash: " + m.hexdigest())
                 idxs, priorities = self.train_critic(batch)
+                # m = hashlib.md5(str(self.actor.getNetwork().get_weights()).encode('utf-8'))
+                # print("2 weights hash: " + m.hexdigest())
                 if step > self.parameters.AC_ACTOR_TRAINING_START:
                     # priorities = self.train_actor_batch(batch, priorities, off_policy_weights)
                     priorities = self.train_actor_batch(batch, priorities)
@@ -778,9 +822,6 @@ class ActorCritic(object):
         #     self.combinedActorCritic.train_on_batch(inputs, targets)
         gradients = self.critic.gradient(inputs, actions)
         self.actor.train(inputs, targets + numpy.array(gradients))
-
-        if self.parameters.CNN_REPR:
-            self.updateSharedLayers(self.actor, self.critic)
 
     def train_actor_batch(self, batch, priorities, off_policy_weights = None):
         batch_len = len(batch[0])
@@ -846,9 +887,6 @@ class ActorCritic(object):
                 used_imp_weights = used_imp_weights[:pos_tde_count]
                 self.actor.train(inputs, targets, used_imp_weights)
 
-        if self.parameters.CNN_REPR:
-            self.updateSharedLayers(self.actor, self.critic)
-
         return priorities
 
     def train_actor_OCACLA(self, batch, evals):
@@ -905,10 +943,6 @@ class ActorCritic(object):
             targets = targets[:count]
             used_imp_weights = used_imp_weights[:count]
             self.actor.train(inputs, targets, used_imp_weights)
-
-        if self.parameters.CNN_REPR:
-            self.updateSharedLayers(self.actor, self.critic)
-
         return updated_actions
 
 
@@ -1016,9 +1050,6 @@ class ActorCritic(object):
         inputs_critic = [inputs_critic_states, inputs_critic_actions]
         self.critic.train(inputs_critic, targets_critic, importance_weights)
 
-        if self.parameters.CNN_REPR:
-            self.updateSharedLayers(self.critic, self.actor)
-
         return idxs, priorities
 
 
@@ -1051,9 +1082,6 @@ class ActorCritic(object):
 
         # Train:
         self.critic.train(inputs_critic, targets_critic, importance_weights)
-
-        if self.parameters.CNN_REPR:
-            self.updateSharedLayers(self.critic, self.actor)
 
         return idxs, priorities
 

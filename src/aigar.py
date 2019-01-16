@@ -8,8 +8,8 @@ import time
 import datetime
 #import pyximport; pyximport.install()
 from controller.controller import Controller
-from model.qLearning import *
-from model.actorCritic import *
+from model.qLearning import QLearn
+from model.actorCritic import ActorCritic
 from model.bot import *
 from model.model import Model
 from model.expReplay import ExpReplay
@@ -26,8 +26,7 @@ from modelCombiner import createCombinedModelGraphs, plot
 import hashlib
 
 import numpy as np
-# import tensorflow as tf
-import random as rn
+
 
 
 def fix_seeds(seedNum):
@@ -42,7 +41,7 @@ def fix_seeds(seedNum):
     # import os
     # os.environ['PYTHONHASHSEED'] = '0'
 
-    # The below is necessary for starting Numpy generated random numbers
+    # The below is necessary for starting np generated random numbers
     # in a well-defined initial state.
 
     if seedNum is not None:
@@ -173,7 +172,7 @@ def createNamedLoadPath(superName, loadedModelName):
         os.makedirs(basePath)
     # Create subFolder for given parameter tweaking
     osPath = os.getcwd() + "/" + superName
-    time.sleep(numpy.random.rand())
+    time.sleep(np.random.rand())
     if not os.path.exists(osPath):
         os.makedirs(osPath)
     # Create folder based on name
@@ -181,9 +180,9 @@ def createNamedLoadPath(superName, loadedModelName):
     startTime = now
     nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
     path = superName + "$" + nowStr + "$"
-    time.sleep(numpy.random.rand())
+    time.sleep(np.random.rand())
     if os.path.exists(path):
-        randNum = numpy.random.randint(100000)
+        randNum = np.random.randint(100000)
         path = superName + "$" + nowStr + "-" + str(randNum) + "$"
     os.makedirs(path)
     path += "/"
@@ -198,7 +197,7 @@ def createNamedPath(superName):
         os.makedirs(basePath)
     #Create subFolder for given parameter tweaking
     osPath = os.getcwd() + "/" + superName
-    time.sleep(numpy.random.rand())
+    time.sleep(np.random.rand())
     if not os.path.exists(osPath):
         os.makedirs(osPath)
     #Create folder based on name
@@ -206,9 +205,9 @@ def createNamedPath(superName):
     startTime = now
     nowStr = now.strftime("%b-%d_%H:%M:%S:%f")
     path = superName  + "$" + nowStr + "$"
-    time.sleep(numpy.random.rand())
+    time.sleep(np.random.rand())
     if os.path.exists(path):
-        randNum = numpy.random.randint(100000)
+        randNum = np.random.randint(100000)
         path = superName + "$" + nowStr + "-" + str(randNum) + "$"
     os.makedirs(path)
     path += "/"
@@ -367,6 +366,8 @@ def createNetwork(parameters, path):
         learningAlg = ActorCritic(parameters)
     elif algorithm == "DPG":
         learningAlg = ActorCritic(parameters)
+    elif algorithm == "SPG":
+        learningAlg = ActorCritic(parameters)
     else:
         print("Wrong algorithm name in parameters.")
         quit()
@@ -397,6 +398,8 @@ def createBots(number, model, botType, parameters, networkLoadPath=None):
             elif algorithm == "CACLA":
                 learningAlg = ActorCritic(parameters)
             elif algorithm == "DPG":
+                learningAlg = ActorCritic(parameters)
+            elif algorithm == "SPG":
                 learningAlg = ActorCritic(parameters)
             else:
                 print("Please enter a valid algorithm.\n")
@@ -481,7 +484,7 @@ def plotTesting(testResults, path, timeBetween, end):
         yLabel = "Mass"
         title =  testResults[0][testType]["plotName"] + " mass over time"
 
-        meanY = numpy.mean(y)
+        meanY = np.mean(y)
         ax.legend(loc='upper left')
         ax.set_ylabel(yLabel)
         ax.set_title(title + " mean value (" + str(round(meanY, 1)) + ") $\pm$ $\sigma$ interval")
@@ -529,10 +532,10 @@ def performTest(testNetworkPath, specialParams):
 
     bots = testModel.getBots()
     massOverTime = [bot.getMassOverTime() for bot in bots]
-    meanMass = numpy.mean([numpy.mean(botMass) for botMass in massOverTime])
-    maxMeanMass = numpy.max(meanMass)
-    maxMass = numpy.max([numpy.max(botMass) for botMass in massOverTime])
-    varianceMass = numpy.mean(numpy.var(massOverTime))
+    meanMass = np.mean([np.mean(botMass) for botMass in massOverTime])
+    maxMeanMass = np.max(meanMass)
+    maxMass = np.max([np.max(botMass) for botMass in massOverTime])
+    varianceMass = np.mean(np.var(massOverTime))
 
     return [massOverTime, meanMass, maxMass, os.getpid()]
 
@@ -572,11 +575,11 @@ def testModel(testNetworkPath, testType, plotName, specialParams, n_tests, testN
         maxMasses.append(testResults[test][2])
     evals = {"name":testType}
     evals["plotName"] = plotName
-    evals["meanScore"] = numpy.mean(meanMasses)
-    evals["stdMean"] = numpy.std(meanMasses)
-    evals["meanMaxScore"] = numpy.mean(maxMasses)
-    evals["stdMax"] = numpy.std(maxMasses)
-    evals["maxScore"] = numpy.max(maxMasses)
+    evals["meanScore"] = np.mean(meanMasses)
+    evals["stdMean"] = np.std(meanMasses)
+    evals["meanMaxScore"] = np.mean(maxMasses)
+    evals["stdMax"] = np.std(maxMasses)
+    evals["maxScore"] = np.max(maxMasses)
     return evals, masses
 
 
@@ -677,7 +680,7 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
     num_cores = mp.cpu_count()
-    if num_cores > 1:
+    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
@@ -771,7 +774,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
     num_cores = mp.cpu_count()
-    if num_cores > 1:
+    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
@@ -788,6 +791,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     elif parameters.ALGORITHM == "CACLA":
         learningAlg = ActorCritic(parameters)
     elif parameters.ALGORITHM == "DPG":
+        learningAlg = ActorCritic(parameters)
+    elif parameters.ALGORITHM == "SPG":
         learningAlg = ActorCritic(parameters)
     else:
         print("Please enter a valid algorithm.\n")
@@ -811,7 +816,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
             env.render()
         actionIdx, action = learningAlg.decideMove(observation, False)
         # If environment has discrete actions, but algorithm is continuous, pick action with highest Q(v)
-        if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
+        if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG" or parameters.ALGORITHM == "SPG":
             actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
         if parameters.CNN_REPR:
@@ -839,7 +844,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     while True:
         # actionIdx, action = learningAlg.decideMove(observation)
         actionIdx, action = learningAlg.decideMove(observation)
-        if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG":
+        if parameters.ALGORITHM in {"CACLA", "DPG", "SPG"}:
             actionIdx = np.argmax(action)
         for _ in range(parameters.FRAME_SKIP_RATE):
             if guiEnabled and processInGUISet:
@@ -935,6 +940,8 @@ def createLearner(parameters, path):
         learningAlg = ActorCritic(parameters)
     elif algorithmName == "DPG":
         learningAlg = ActorCritic(parameters)
+    elif algorithmName == "SPG":
+        learningAlg = ActorCritic(parameters)
     else:
         print("Please enter a valid algorithm.\n")
     learningAlg.initializeNetwork(path)
@@ -947,7 +954,7 @@ def train_expReplay(parameters, expReplayer, learningAlg, step):
 
     idxs, priorities, updated_actions = learningAlg.learn(batch, step)
     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-        expReplayer.update_priorities(idxs, numpy.abs(priorities) + 1e-4)
+        expReplayer.update_priorities(idxs, np.abs(priorities) + 1e-4)
         if parameters.OCACLA_REPLACE_TRANSITIONS:
             if updated_actions is not None:
                 expReplayer.update_dones(idxs, updated_actions)
@@ -963,7 +970,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     del SPEC_OS
     # Increase priority of this process
     num_cores = mp.cpu_count()
-    if num_cores > 1:
+    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
@@ -975,7 +982,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             m = hashlib.md5(str(learningAlg.getNetworkWeights()[weight]).encode('utf-8'))
             print("Trainer saved weights hash: " + m.hexdigest())
     collector_events["Col_can_proceed"].set()
-    if EXP_REPLAY_ENABLED:
+    if parameters.EXP_REPLAY_ENABLED:
         if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
             expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
         else:
@@ -1049,7 +1056,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                 expReplayer.add(*(experience[0]))
             train_expReplay(parameters, expReplayer, learningAlg, step)
         else:
-            tr_batch = numpy.array(batch).transpose()
+            tr_batch = np.array(batch).transpose()
             batch = (tr_batch[0,0,:], tr_batch[1,0,:], tr_batch[2,0,:], tr_batch[3,0,:], tr_batch[4,0,:])
             _,_,_ = learningAlg.learn(batch, step)
 
@@ -1084,7 +1091,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     if __debug__:
         print("Trainer sending signal: 'DONE'")
     queue.put("DONE")
-    cartPoleTest(learningAlg, path, "end.png", parameters)
+    if parameters.GAME_NAME != "Agar.io":
+        cartPoleTest(learningAlg, path, "end.png", parameters)
 
 
 def cartPoleTest(alg, path, name, parameters):
@@ -1105,7 +1113,7 @@ def cartPoleTest(alg, path, name, parameters):
                 value = network.predict(np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]]))
                 row.append(value)
                 
-            elif parameters.ALGORITHM == "DPG":
+            elif parameters.ALGORITHM in {"DPG", "SPG"}:
                 network = alg.getNetworks()["Q(S,A)"]
                 state = np.array([[0.0,0.0,float(3.14/180*t/5 -3.14/180*15),float(v/5.0-1.5)]])
                 action = np.array([[0.0, 0.0]])
@@ -1115,7 +1123,7 @@ def cartPoleTest(alg, path, name, parameters):
             else:
                 print("You w0t m8?")
                 quit()
-        z.append(numpy.array(row))
+        z.append(np.array(row))
 
     for t in range(3*5):
         x.append(str(float(3.14/180*t/5 -3.14/180*15)))
@@ -1143,7 +1151,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     trainInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     num_cores = mp.cpu_count()
-    if num_cores > 1:
+    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {num_cores-1})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
         trainer_lastSignal = time.time()

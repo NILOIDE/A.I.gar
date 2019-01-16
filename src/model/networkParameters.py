@@ -1,11 +1,11 @@
-ALGORITHM = "DPG" # "Q-learning" or "CACLA" or "DPG" so far
+ALGORITHM = "CACLA" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "Agar.io"
+GAME_NAME = "Agar.io"#""MountainCarContinuous-v0"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
@@ -30,12 +30,10 @@ ENABLE_TESTING = False
 DUR_TRAIN_TEST_NUM = 10
 TRAIN_PERCENT_TEST_INTERVAL = 5
 FINAL_TEST_NUM = 10
-FRAME_SKIP_RATE = 4
+FRAME_SKIP_RATE = 10
 MAX_TRAINING_STEPS = 500000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
-TRAINING_WAIT_TIME = 1 #RESET_LIMIT # Only train after the wait time is over to maximize gpu effectiveness. 1 == train every step
-TRAINING_PHASE_LEN = 1 #TRAINING_WAIT_TIME / (FRAME_SKIP_RATE + 1) if TRAINING_WAIT_TIME >= FRAME_SKIP_RATE + 1 else 1
 ENABLE_SPLIT = False
 ENABLE_EJECT = False
 # Q-Learning
@@ -111,7 +109,7 @@ INITIALIZER = "glorot_uniform" #"Default" or "glorot_uniform" or "glorot_normal"
 
 # Q-learning
 NEURON_TYPE = "MLP"
-Q_LAYERS = (250,250,250)
+Q_LAYERS = (250,)
 ALPHA = 0.001 * (1 + DROPOUT * 9)
 SQUARE_ACTIONS = True
 NUM_ACTIONS = 25
@@ -119,7 +117,7 @@ ACTIVATION_FUNC_HIDDEN = 'relu'
 ELU_ALPHA = 1 # TODO: only works for Q-learning so far. Test if it is useful, if so implement for others too
 ACTIVATION_FUNC_OUTPUT = 'linear'
 GRID_VIEW_ENABLED = True
-TARGET_NETWORK_STEPS = 500
+TARGET_NETWORK_STEPS = 1500
 USE_ACTION_AS_INPUT = False
 TD = 0
 Q_WEIGHT_DECAY    = 0#0.001 #0.001 L2 weight decay parameter. Set to 0 to disable
@@ -140,9 +138,9 @@ OPTIMIZER_POLICY = "Adam"
 ACTIVATION_FUNC_HIDDEN_POLICY = "relu"
 
 # CACLA:
-CACLA_CRITIC_LAYERS         = (250, 250, 250)
+CACLA_CRITIC_LAYERS         = (250,)
 CACLA_CRITIC_ALPHA          = 0.000075
-CACLA_ACTOR_LAYERS          = (100, 100, 100)
+CACLA_ACTOR_LAYERS          = (100,)
 CACLA_ACTOR_ALPHA           = 0.0005
 CACLA_TAU                   = 0.02
 CACLA_UPDATE_ON_NEGATIVE_TD = False
@@ -155,7 +153,7 @@ CACLA_VAR_START             = 1
 CACLA_VAR_BETA              = 0.001
 
 # Sampled Policy Gradient (SPG):
-OCACLA_ENABLED               = False
+OCACLA_ENABLED               = True if ALGORITHM == "SPG" else False
 OCACLA_EXPL_SAMPLES          = 3
 OCACLA_ONLINE_SAMPLES        = 0
 OCACLA_ONLINE_SAMPLING_NOISE = 0
@@ -168,11 +166,11 @@ OCACLA_NOISE_DECAY           = OCACLA_END_NOISE ** (OCACLA_START_NOISE / MAX_TRA
 
 # Deterministic Policy Gradient (DPG):
 DPG_TAU                    = 0.001 # How quickly the weights of the target networks are updated
-DPG_CRITIC_LAYERS          = (250, 250, 250)
+DPG_CRITIC_LAYERS          = (250,250,250)
 DPG_CRITIC_ALPHA           = 0.0005
 DPG_CRITIC_FUNC            = "relu"
 DPG_CRITIC_WEIGHT_DECAY    = 0.001 #0.001 L2 weight decay parameter. Set to 0 to disable
-DPG_ACTOR_LAYERS           = (100, 100, 100)
+DPG_ACTOR_LAYERS           = (100,100,100)
 DPG_ACTOR_ALPHA            = 0.00001
 DPG_ACTOR_FUNC             = "relu"
 DPG_Q_VAL_INCREASE         = 2
@@ -184,7 +182,7 @@ DPG_CACLA_ALTERNATION      = 0 #fraction of training time in which cacla is used
 DPG_CACLA_INV_ALTERNATION  = 0 #fraction of training time after which cacla is used instead of dpg
 DPG_CACLA_STEPS            = DPG_CACLA_ALTERNATION * MAX_TRAINING_STEPS
 DPG_DPG_STEPS              = DPG_CACLA_INV_ALTERNATION * MAX_TRAINING_STEPS
-DPG_ACTOR_OPTIMIZER        = "Adam"
+DPG_ACTOR_OPTIMIZER        = "SGD"
 DPG_ACTOR_NESTEROV         = 0
 
 # LSTM
@@ -217,9 +215,9 @@ CNN_LAST_GRID = False
 
 # Multiprocessing:
 NUM_COLLECTORS = 3
-NUM_EXPS_BEFORE_TRAIN = 32#int(MEMORY_CAPACITY/40) 
+NUM_EXPS_BEFORE_TRAIN = 64#int(MEMORY_CAPACITY/40)
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0
 TESTING_WORKER_POOL = DUR_TRAIN_TEST_NUM
 GATHER_EXP = True
-ONE_BEHIND_TRAINING = True
+ONE_BEHIND_TRAINING = False

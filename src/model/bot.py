@@ -215,7 +215,7 @@ class Bot(object):
                 action = self.currentActionIdx if self.learningAlg.discrete else self.currentAction
                 if self.gatherExperiences:
                     if str(self.learningAlg) != "Q-learning":
-                        if self.parameters.ALGORITHM== "CACLA":
+                        if self.parameters.ALGORITHM == "CACLA":
                             # Save raw action without noise in "done" field to later determine difference in policies
                             self.experiences.append((self.oldState, action, self.lastReward, newState, self.currentRawAction))
                         else:
