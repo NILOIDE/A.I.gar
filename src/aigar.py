@@ -6,7 +6,6 @@ import shutil
 import psutil
 import time
 import datetime
-#import pyximport; pyximport.install()
 from controller.controller import Controller
 from model.qLearning import QLearn
 from model.actorCritic import ActorCritic
@@ -354,6 +353,7 @@ def printTrainProgress(parameters, currentPart, startTime):
           "Estimated total duration time:     " + totalTimePrint + "\n" +
           "::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::")
     return currentPart
+
 
 def createNetwork(parameters, path):
     if not os.path.exists(path + "models/"):
@@ -970,7 +970,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     del SPEC_OS
     # Increase priority of this process
     num_cores = mp.cpu_count()
-    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
+    if num_cores > 1 and parameters.NUM_COLLECTORS > 2:
         os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     p = psutil.Process()
     p.nice(0)
@@ -995,6 +995,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         print("Beginning initial experience collection...")
         collectionTime = time.time()
         while len(expReplayer) < parameters.NUM_EXPS_BEFORE_TRAIN:
+            print(str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN), end="\r")
             for experience in experience_queue.get():
                 for i in range(1, parameters.NUM_COLLECTORS + 1):
                     collector_events[i].wait()
@@ -1154,8 +1155,6 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {num_cores-1})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
-        trainer_lastSignal = time.time()
-        killTrainer = False
         # Create collectors and exp queue
         experience_queue = mp.Queue()
         collector_events = {"Col_can_proceed": mp.Event()}
@@ -1190,7 +1189,6 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
                 if __debug__:
                     print("Master received signal: 'PRINT_TRAIN_PROGRESS'")
                 currentPart = printTrainProgress(parameters, currentPart, startTime)
-                trainer_lastSignal = time.time()
             # When trainer signals training is 'DONE', terminate child processes (collectors and trainer) and break
             if trainer_signal == "DONE":
                 if __debug__:
@@ -1203,7 +1201,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
               "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
 
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-    print("Training done.\n")
+print("Training done.\n")
 
 
 def run():

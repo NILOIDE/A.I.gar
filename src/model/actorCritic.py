@@ -3,8 +3,10 @@ import numpy
 import math
 from keras.models import load_model
 import keras.backend as K
+import tensorflow as tf
 from keras.layers import Conv2D, Flatten, Input, Dense
 from keras.models import Model
+import time
 import hashlib
 
 
@@ -207,11 +209,11 @@ class ValueNetwork(object):
         return self.model
 
     def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
+        return [self.model.layers[i].get_weights() for i in range(1, self.num_cnn_layers+1)]
 
     def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
+        for i in range(self.num_cnn_layers):
+            self.model.layers[i+1].set_weights(weights[i])
 
 
 class PolicyNetwork(object):
@@ -256,18 +258,13 @@ class PolicyNetwork(object):
             self.load(modelName)
         else:
             self.input, self.model, self.target_model = self.createNetwork()
-            
+
+        if self.parameters.ALGORITHM == "DPG":
+            self.adam_optimizer = self.createOptimizer()
+
         self.optimizer = keras.optimizers.Adam(lr=self.learningRate, amsgrad=self.parameters.AMSGRAD)
-        # self.optimizer = self.createOptimizer()
         self.model.compile(loss='mse', optimizer=self.optimizer)
         self.target_model.compile(loss='mse', optimizer=self.optimizer)
-
-    # def createOptimizer(self):
-    #     action_gdts = K.placeholder(shape=(None, self.num_outputs))
-    #     params_grad = tf.gradients(self.model.output, self.model.trainable_weights, -action_gdts)
-    #     grads = zip(params_grad, self.model.trainable_weights)
-    #     grads = list(grads)[1:]
-    #     return K.function([self.model.input, action_gdts], [tf.train.AdamOptimizer(self.parameters.DPG_CRITIC_ALPHA).apply_gradients(grads)])
 
     def createNetwork(self):
         if self.parameters.INITIALIZER == "glorot_uniform":
@@ -328,6 +325,13 @@ class PolicyNetwork(object):
         target_model.set_weights(model.get_weights())
         return net_input, model, target_model
 
+    def createOptimizer(self):
+        action_gdts = K.placeholder(shape=(None, self.num_outputs))
+        params_grad = tf.gradients(self.model.output, self.model.trainable_weights, -action_gdts)
+        grads = zip(params_grad, self.model.trainable_weights)
+        return K.function([self.model.input, action_gdts],
+                          [tf.train.AdamOptimizer(self.learningRate).apply_gradients(grads)][1:])
+
     def load(self, modelName=None):
         if modelName is not None:
             path = modelName
@@ -343,13 +347,12 @@ class PolicyNetwork(object):
     def predict_target_model(self, state):
         if self.parameters.CNN_REPR:
             state = numpy.array([state])
-        return self.target_model.predict(state)
+        return self.target_model.predict(state)[0]
 
-    # def train(self, state, gradients):
-    #     self.optimizer([state, gradients])
+    def train_DPG(self, state, gradients):
+        self.adam_optimizer([state, gradients])
 
     def train(self, inputs, targets, weights=None):
-        # print(targets)
         if self.parameters.ACTOR_IS and weights is not None:
             self.model.train_on_batch(inputs, targets, sample_weight=weights)
         else:
@@ -376,11 +379,11 @@ class PolicyNetwork(object):
         return self.model
 
     def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
+        return [self.model.layers[i].get_weights() for i in range(1, self.num_cnn_layers+1)]
 
     def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
+        for i in range(self.num_cnn_layers):
+            self.model.layers[i+1].set_weights(weights[i])
 
 
 class ActionValueNetwork(object):
@@ -498,7 +501,7 @@ class ActionValueNetwork(object):
         return self.target_model.predict([state, action])[0][0]
     
     def gradient(self, state, action):
-        return self.q_gradient_function([state, action])[0]
+        return self.q_gradient_function([state, action])
     
     def update_target_model(self):
         self.target_model.set_weights(self.model.get_weights())
@@ -524,11 +527,11 @@ class ActionValueNetwork(object):
         return self.target_model
 
     def get_conv_layer_weights(self):
-        return [self.model.layers[i].get_weights() for i in range(self.num_cnn_layers+1)]
+        return [self.model.layers[i].get_weights() for i in range(1,self.num_cnn_layers+1)]
 
     def set_conv_layer_weights(self, weights):
-        for i in range(self.num_cnn_layers+1):
-            self.model.layers[i].set_weights(weights[i])
+        for i in range(self.num_cnn_layers):
+            self.model.layers[i+1].set_weights(weights[i])
 
     
 class ActorCritic(object):
@@ -546,7 +549,6 @@ class ActorCritic(object):
         self.ocacla_noise_decay = self.parameters.OCACLA_NOISE_DECAY
         self.counts = [] # For SPG/CACLA: count how much actor training we do each step
         self.caclaVar = parameters.CACLA_VAR_START
-        self.input = None
         self.networks = {}
         self.numCNNlayers = 0
 
@@ -576,7 +578,7 @@ class ActorCritic(object):
         self.combinedActorCritic = None
 
     def createCombinedActorCritic(self, actor, critic):
-        for layer in critic.model.layers[self.numCNNlayers+1:]:
+        for layer in critic.model.layers:
             layer.trainable = False
         #mergeLayer = keras.layers.concatenate([actor.inputs[0], actor.outputs[0]])
         nonTrainableCritic = critic.model([actor.model.inputs[0], actor.model.outputs[0]])
@@ -599,10 +601,10 @@ class ActorCritic(object):
         if self.parameters.ALGORITHM == "DPG":
             self.actor = PolicyNetwork(self.parameters, None)
             self.critic = ActionValueNetwork(self.parameters, None)
-            # self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
+            self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
             networks["MU(S)"] = self.actor
             networks["Q(S,A)"] = self.critic
-            # networks["Actor-Critic-Combo"] = self.combinedActorCritic
+            networks["Actor-Critic-Combo"] = self.combinedActorCritic
         else:
             self.actor = PolicyNetwork(self.parameters, None)
             networks["MU(S)"] = self.actor
@@ -622,10 +624,10 @@ class ActorCritic(object):
             if self.parameters.ALGORITHM == "DPG":
                 self.actor = PolicyNetwork(self.parameters, loadPath)
                 self.critic = ActionValueNetwork(self.parameters, loadPath)
-                # self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
+                self.combinedActorCritic = self.createCombinedActorCritic(self.actor, self.critic)
                 networks["MU(S)"] = self.actor
                 networks["Q(S,A)"] = self.critic
-                # networks["Actor-Critic-Combo"] = self.combinedActorCritic
+                networks["Actor-Critic-Combo"] = self.combinedActorCritic
             else:
                 self.actor = PolicyNetwork(self.parameters, loadPath)
                 networks["MU(S)"] = self.actor
@@ -654,11 +656,9 @@ class ActorCritic(object):
         self.networks = networks
         return networks
 
-
     def updateSharedLayers(self, updated_net, outdated_net):
         new_w = updated_net.get_conv_layer_weights()
         outdated_net.set_conv_layer_weights(new_w)
-
 
     def updateNoise(self):
         self.std *= self.noise_decay_factor
@@ -666,7 +666,7 @@ class ActorCritic(object):
         if self.parameters.END_DISCOUNT:
             self.discount = 1 - self.parameters.DISCOUNT_INCREASE_FACTOR * (1 - self.discount)
 
-    def updateCriticNetworks(self):
+    def updateTargetNetworks(self):
         self.critic.update_target_model()
         self.actor.update_target_model()
 
@@ -674,11 +674,11 @@ class ActorCritic(object):
         self.actor.softlyUpdateTargetModel()
         self.critic.softlyUpdateTargetModel()
 
-    def updateNetworks(self):
-        if self.parameters.SOFT_TARGET_UPDATES:
-            self.softlyUpdateNetworks()
-        else:
-            self.updateCriticNetworks()
+    # def updateNetworks(self):
+    #     if self.parameters.SOFT_TARGET_UPDATES:
+    #         self.softlyUpdateNetworks()
+    #     else:
+    #         self.updateTargetNetworks()
 
     def apply_off_policy_corrections_cacla(self, batch):
         batchLen = len(batch[0])
@@ -701,7 +701,6 @@ class ActorCritic(object):
                 squared_sum += policy_difference[3] ** 2
             magnitude_difference = math.sqrt(squared_sum)
 
-
             off_policy_correction = 1 / ((1 + magnitude_difference) ** self.parameters.CACLA_OFF_POLICY_CORR)
 
             if self.parameters.CACLA_OFF_POLICY_CORR_SIGN:
@@ -723,9 +722,9 @@ class ActorCritic(object):
             if (self.parameters.DPG_USE_DPG_ACTOR_TRAINING and step > self.parameters.AC_ACTOR_TRAINING_START
                     and (step > self.parameters.DPG_CACLA_STEPS) or step <= self.parameters.DPG_DPG_STEPS):
                 self.train_actor_DPG(batch)
-            if (self.parameters.DPG_USE_CACLA or step < self.parameters.DPG_CACLA_STEPS
-                    or step > self.parameters.DPG_DPG_STEPS) and step > self.parameters.AC_ACTOR_TRAINING_START:
-                priorities = self.train_actor_batch(batch, priorities)
+            # if (self.parameters.DPG_USE_CACLA or step < self.parameters.DPG_CACLA_STEPS
+            #         or step > self.parameters.DPG_DPG_STEPS) and step > self.parameters.AC_ACTOR_TRAINING_START:
+            #     priorities = self.train_actor_batch(batch, priorities)
         else:
             if self.parameters.OCACLA_ENABLED:
                 idxs, priorities = self.train_critic_DPG(batch, get_evals=True)
@@ -740,15 +739,17 @@ class ActorCritic(object):
                     priorities = self.train_actor_batch(batch, priorities)
         self.latestTDerror = numpy.mean(priorities)
         self.updateNoise()
-        if (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
-            self.updateNetworks()
+        if self.parameters.SOFT_TARGET_UPDATES and self.parameters.ALGORITHM == "DPG":
+            # if (step + 1) % self.parameters.TARGET_NETWORK_STEPS == 0:
+            self.softlyUpdateNetworks()
+        elif (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
+            self.updateTargetNetworks()
+
 
         return idxs, priorities, updated_actions
 
     def train_actor_DPG(self, batch):
         batch_len = len(batch[0])
-        # TODO: Can probably remove this kind of if statements by making non-cnn use the same list
-        # concatenation as cnn currently uses
         if self.parameters.CNN_REPR:
             inputShape = numpy.array([batch_len] + list(self.input_len))
             inputs = numpy.zeros(inputShape)
@@ -767,17 +768,22 @@ class ActorCritic(object):
             #     oldPrediction = self.combinedActorCritic.predict(numpy.array([old_s]))[0]
             # else:
             #     oldPrediction = self.combinedActorCritic.predict(old_s)[0]
-            oldPrediction = self.critic.predict(old_s, self.actor.predict_target_model(old_s))
+            oldPrediction = self.critic.predict_target_model(old_s, numpy.array([self.actor.predict(old_s)]))
             inputs[sample_idx] = old_s
-            targets[sample_idx] = oldPrediction #+ self.parameters.DPG_Q_VAL_INCREASE
+            targets[sample_idx] = oldPrediction + self.parameters.DPG_Q_VAL_INCREASE
             actions[sample_idx] = a
+            # actions[sample_idx] = self.actor.predict(old_s)
 
-        # if self.parameters.ACTOR_IS:
-        #     self.combinedActorCritic.train_on_batch(inputs, targets, sample_weight=importance_weights)
-        # else:
-        #     self.combinedActorCritic.train_on_batch(inputs, targets)
-        gradients = self.critic.gradient(inputs, actions)
-        self.actor.train(inputs, targets + numpy.array(gradients))
+        # m = hashlib.md5(str(self.actor.target_model.get_weights()).encode('utf-8'))
+        # print("1_________: " + m.hexdigest())
+        if self.parameters.ACTOR_IS:
+            self.combinedActorCritic.train_on_batch(inputs, targets, sample_weight=importance_weights)
+        else:
+            self.combinedActorCritic.train_on_batch(inputs, targets)
+        # m = hashlib.md5(str(self.critic.target_model.get_weights()).encode('utf-8'))
+        # print("2_________: " + m.hexdigest())
+        # gradients = self.critic.gradient(inputs, actions)
+        # self.actor.train_DPG(inputs, numpy.array(gradients).reshape((-1, self.action_len)))
 
         if self.parameters.CNN_REPR:
             self.updateSharedLayers(self.actor, self.critic)
@@ -852,6 +858,7 @@ class ActorCritic(object):
         return priorities
 
     def train_actor_OCACLA(self, batch, evals):
+
         batch_len = len(batch[0])
         len_output = self.actor.num_outputs
         if self.parameters.CNN_REPR:
@@ -917,7 +924,7 @@ class ActorCritic(object):
             std = self.std
         #Gaussian Noise:
         if self.parameters.NOISE_TYPE == "Gaussian":
-            action = [numpy.random.normal(output, std) for output in action]
+            action = numpy.random.normal(action, std, action.shape)
         elif self.parameters.NOISE_TYPE == "Orn-Uhl":
             for idx in range(len(action)):
                 noise = self.ornUhlPrev[idx] + self.parameters.ORN_UHL_THETA * (self.parameters.ORN_UHL_MU -
@@ -999,7 +1006,7 @@ class ActorCritic(object):
                 alive = new_s is not None
             if alive:
                 if self.parameters.DPG_USE_TARGET_MODELS:
-                    estimationNewState = self.critic.predict_target_model(new_s, self.actor.predict_target_model(new_s))
+                    estimationNewState = self.critic.predict_target_model(new_s, numpy.array([self.actor.predict_target_model(new_s)]))
                 else:
                     estimationNewState = self.critic.predict(new_s, numpy.array([self.actor.predict(new_s)]))
                 target += self.discount * estimationNewState

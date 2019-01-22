@@ -94,15 +94,6 @@ class Bot(object):
             self.ejectLikelihood = 100000  # numpy.random.randint(9990,10000)
         self.totalMasses = []
         self.memories = []
-        # If using lstm the memories have to be ordered correctly in time for this bot.
-        # if type == "NN" and self.parameters.NEURON_TYPE == "LSTM":
-        #     #self.expReplayer = ExpReplay(parameters)
-        #     if parameters.PRIORITIZED_EXP_REPLAY_ENABLED:
-        #         self.expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA,
-        #                                                    parameters.MEMORY_BETA)
-        #     else:
-        #         self.expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
-
         self.secondLastSelfGrid = None
         self.lastSelfGrid = None
         self.secondLastEnemyGrid = None
@@ -284,7 +275,8 @@ class Bot(object):
             if self.parameters.GRID_VIEW_ENABLED:
                 if self.parameters.CNN_REPR:
                     if self.parameters.CNN_P_REPR:
-                        stateRepr = self.rgbGenerator.get_cnn_inputRGB(self.player)
+                        rgb_values = self.rgbGenerator.get_cnn_inputRGB(self.player)
+                        stateRepr = (rgb_values - 255) / 100  # Normalize input to range [0,1]
                         if self.parameters.CNN_LAST_GRID:
                             stateRepr = numpy.concatenate((stateRepr, self.lastPixelGrid), axis=2)
                             self.lastPixelGrid = stateRepr

@@ -1,4 +1,4 @@
-ALGORITHM = "CACLA" # "Q-learning" or "CACLA" or "DPG" so far
+ALGORITHM = "DPG" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
@@ -19,7 +19,7 @@ ENABLE_GREEDY_SPLIT = False
 # Experience replay:
 EXP_REPLAY_ENABLED = True
 PRIORITIZED_EXP_REPLAY_ENABLED = True if EXP_REPLAY_ENABLED else False
-MEMORY_CAPACITY = 75000
+MEMORY_CAPACITY = 20000
 MEMORY_BATCH_LEN = 32
 MEMORY_ALPHA = 0.6
 MEMORY_BETA = 0.4
@@ -31,7 +31,7 @@ DUR_TRAIN_TEST_NUM = 10
 TRAIN_PERCENT_TEST_INTERVAL = 5
 FINAL_TEST_NUM = 10
 FRAME_SKIP_RATE = 10
-MAX_TRAINING_STEPS = 500000
+MAX_TRAINING_STEPS = 1000000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 ENABLE_SPLIT = False
@@ -109,7 +109,7 @@ INITIALIZER = "glorot_uniform" #"Default" or "glorot_uniform" or "glorot_normal"
 
 # Q-learning
 NEURON_TYPE = "MLP"
-Q_LAYERS = (250,)
+Q_LAYERS = (250,250,250)
 ALPHA = 0.001 * (1 + DROPOUT * 9)
 SQUARE_ACTIONS = True
 NUM_ACTIONS = 25
@@ -138,9 +138,9 @@ OPTIMIZER_POLICY = "Adam"
 ACTIVATION_FUNC_HIDDEN_POLICY = "relu"
 
 # CACLA:
-CACLA_CRITIC_LAYERS         = (250,)
+CACLA_CRITIC_LAYERS         = (250,250,250)
 CACLA_CRITIC_ALPHA          = 0.000075
-CACLA_ACTOR_LAYERS          = (100,)
+CACLA_ACTOR_LAYERS          = (100,100,100)
 CACLA_ACTOR_ALPHA           = 0.0005
 CACLA_TAU                   = 0.02
 CACLA_UPDATE_ON_NEGATIVE_TD = False
@@ -169,11 +169,11 @@ DPG_TAU                    = 0.001 # How quickly the weights of the target netwo
 DPG_CRITIC_LAYERS          = (250,250,250)
 DPG_CRITIC_ALPHA           = 0.0005
 DPG_CRITIC_FUNC            = "relu"
-DPG_CRITIC_WEIGHT_DECAY    = 0.001 #0.001 L2 weight decay parameter. Set to 0 to disable
+DPG_CRITIC_WEIGHT_DECAY    = 0 #0.001 L2 weight decay parameter. Set to 0 to disable
 DPG_ACTOR_LAYERS           = (100,100,100)
 DPG_ACTOR_ALPHA            = 0.00001
 DPG_ACTOR_FUNC             = "relu"
-DPG_Q_VAL_INCREASE         = 2
+DPG_Q_VAL_INCREASE         = 1
 DPG_FEED_ACTION_IN_LAYER   = 1
 DPG_USE_DPG_ACTOR_TRAINING = True
 DPG_USE_TARGET_MODELS      = True
@@ -182,7 +182,7 @@ DPG_CACLA_ALTERNATION      = 0 #fraction of training time in which cacla is used
 DPG_CACLA_INV_ALTERNATION  = 0 #fraction of training time after which cacla is used instead of dpg
 DPG_CACLA_STEPS            = DPG_CACLA_ALTERNATION * MAX_TRAINING_STEPS
 DPG_DPG_STEPS              = DPG_CACLA_INV_ALTERNATION * MAX_TRAINING_STEPS
-DPG_ACTOR_OPTIMIZER        = "SGD"
+DPG_ACTOR_OPTIMIZER        = "Adam"
 DPG_ACTOR_NESTEROV         = 0
 
 # LSTM
@@ -192,7 +192,7 @@ TRACE_MIN = 1 # The minimum amount of traces that are not trained on, as they ha
 MEMORY_TRACE_LEN = 15 # The length of memory traces retrieved via exp replay
 
 # CNN
-CNN_REPR = True
+CNN_REPR = False
 
 # Handcraft representation
 CNN_USE_L1 = True
