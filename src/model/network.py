@@ -4,7 +4,6 @@ import time
 keras.backend.set_image_dim_ordering('tf')
 import numpy
 
-numpy.set_printoptions(threshold=numpy.nan)
 import tensorflow as tf
 import keras.backend as K
 from keras.layers import Dense, LSTM, Softmax, Conv2D, MaxPooling2D, Flatten, Input, Dropout, BatchNormalization

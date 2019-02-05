@@ -1,11 +1,11 @@
-ALGORITHM = "DPG" # "Q-learning" or "CACLA" or "DPG" so far
+ALGORITHM = "CACLA" # "Q-learning" or "CACLA" or "DPG" so far
 
 Default = False
 VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "Agar.io"#""MountainCarContinuous-v0"
+GAME_NAME = "HalfCheetah-v2"#"MountainCarContinuous-v0"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
@@ -17,21 +17,21 @@ NUM_RANDOM_BOTS = 0
 ENABLE_GREEDY_SPLIT = False
 
 # Experience replay:
-EXP_REPLAY_ENABLED = True
-PRIORITIZED_EXP_REPLAY_ENABLED = True if EXP_REPLAY_ENABLED else False
-MEMORY_CAPACITY = 20000
-MEMORY_BATCH_LEN = 32
+EXP_REPLAY_ENABLED = False
+PRIORITIZED_EXP_REPLAY_ENABLED = False if EXP_REPLAY_ENABLED else False
+MEMORY_CAPACITY = 10000
+MEMORY_BATCH_LEN = 64
 MEMORY_ALPHA = 0.6
 MEMORY_BETA = 0.4
 
 # General Training:
 ENABLE_TRAINING = True
-ENABLE_TESTING = False
+ENABLE_TESTING = True
 DUR_TRAIN_TEST_NUM = 10
 TRAIN_PERCENT_TEST_INTERVAL = 5
-FINAL_TEST_NUM = 10
-FRAME_SKIP_RATE = 10
-MAX_TRAINING_STEPS = 1000000
+FINAL_TEST_NUM = 0
+FRAME_SKIP_RATE = 6
+MAX_TRAINING_STEPS = 500000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
 ENABLE_SPLIT = False
@@ -48,7 +48,7 @@ MAXNORM = 3
 BATCHNORM = False
 # General RL:
 MASS_AS_REWARD = False
-DISCOUNT = 0.85
+DISCOUNT = 0.90
 END_DISCOUNT = 0#0.85 # set to 0 to disable
 DISCOUNT_INCREASE_FACTOR = (1 - END_DISCOUNT) ** (1 / MAX_TRAINING_STEPS) if MAX_TRAINING_STEPS != 0 else 0
 # Noise and Exploration:
@@ -109,7 +109,7 @@ INITIALIZER = "glorot_uniform" #"Default" or "glorot_uniform" or "glorot_normal"
 
 # Q-learning
 NEURON_TYPE = "MLP"
-Q_LAYERS = (250,250,250)
+Q_LAYERS = (100,100)
 ALPHA = 0.001 * (1 + DROPOUT * 9)
 SQUARE_ACTIONS = True
 NUM_ACTIONS = 25
@@ -138,9 +138,9 @@ OPTIMIZER_POLICY = "Adam"
 ACTIVATION_FUNC_HIDDEN_POLICY = "relu"
 
 # CACLA:
-CACLA_CRITIC_LAYERS         = (250,250,250)
+CACLA_CRITIC_LAYERS         = (100,)
 CACLA_CRITIC_ALPHA          = 0.000075
-CACLA_ACTOR_LAYERS          = (100,100,100)
+CACLA_ACTOR_LAYERS          = (100,)
 CACLA_ACTOR_ALPHA           = 0.0005
 CACLA_TAU                   = 0.02
 CACLA_UPDATE_ON_NEGATIVE_TD = False
@@ -166,14 +166,14 @@ OCACLA_NOISE_DECAY           = OCACLA_END_NOISE ** (OCACLA_START_NOISE / MAX_TRA
 
 # Deterministic Policy Gradient (DPG):
 DPG_TAU                    = 0.001 # How quickly the weights of the target networks are updated
-DPG_CRITIC_LAYERS          = (250,250,250)
+DPG_CRITIC_LAYERS          = (80,80)
 DPG_CRITIC_ALPHA           = 0.0005
 DPG_CRITIC_FUNC            = "relu"
 DPG_CRITIC_WEIGHT_DECAY    = 0 #0.001 L2 weight decay parameter. Set to 0 to disable
-DPG_ACTOR_LAYERS           = (100,100,100)
+DPG_ACTOR_LAYERS           = (80,80)
 DPG_ACTOR_ALPHA            = 0.00001
 DPG_ACTOR_FUNC             = "relu"
-DPG_Q_VAL_INCREASE         = 1
+DPG_Q_VAL_INCREASE         = 2
 DPG_FEED_ACTION_IN_LAYER   = 1
 DPG_USE_DPG_ACTOR_TRAINING = True
 DPG_USE_TARGET_MODELS      = True
@@ -214,7 +214,7 @@ CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_COLLECTORS = 3
+NUM_COLLECTORS = 32
 NUM_EXPS_BEFORE_TRAIN = 64#int(MEMORY_CAPACITY/40)
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0

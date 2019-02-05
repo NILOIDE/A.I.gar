@@ -740,7 +740,6 @@ class ActorCritic(object):
         self.latestTDerror = numpy.mean(priorities)
         self.updateNoise()
         if self.parameters.SOFT_TARGET_UPDATES and self.parameters.ALGORITHM == "DPG":
-            # if (step + 1) % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.softlyUpdateNetworks()
         elif (step+1) % self.parameters.TARGET_NETWORK_STEPS == 0:
             self.updateTargetNetworks()
@@ -763,13 +762,13 @@ class ActorCritic(object):
         for sample_idx in range(batch_len):
             old_s, a, r, new_s = batch[0][sample_idx], batch[1][sample_idx], batch[2][sample_idx], batch[3][
                 sample_idx]
+            inputs[sample_idx] = old_s
             # TODO: dunno why this if statement is needs. AC-Combo has same input dims as Actor in non-cnn, but not in cnn???????
             # if self.parameters.CNN_REPR:
             #     oldPrediction = self.combinedActorCritic.predict(numpy.array([old_s]))[0]
             # else:
             #     oldPrediction = self.combinedActorCritic.predict(old_s)[0]
-            oldPrediction = self.critic.predict_target_model(old_s, numpy.array([self.actor.predict(old_s)]))
-            inputs[sample_idx] = old_s
+            oldPrediction = self.critic.predict_target_model(old_s, numpy.array([self.actor.predict_target_model(old_s)]))
             targets[sample_idx] = oldPrediction + self.parameters.DPG_Q_VAL_INCREASE
             actions[sample_idx] = a
             # actions[sample_idx] = self.actor.predict(old_s)

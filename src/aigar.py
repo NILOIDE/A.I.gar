@@ -4,6 +4,7 @@ import importlib
 import importlib.util
 import shutil
 import psutil
+import distutils
 import time
 import datetime
 from controller.controller import Controller
@@ -97,6 +98,7 @@ def initModelFolder(name = None, loadedModelName = None, model_in_subfolder = No
                 path, startTime = createNamedLoadPath(name, loadedModelName)
             else:
                 path, startTime = createLoadPath(loadedModelName)
+            distutils.dir_util.copy_tree(loadedModelName + "models/", path + "models/")
     copyParameters(path, loadedModelName)
     return path, startTime
 
@@ -610,7 +612,7 @@ def testingProcedure(path, testNetworkPath, parameters, testName, n_tests):
 
 
 def runFinalTests(path, parameters):
-    testNetworkPath = path + "models/model.h5"
+    testNetworkPath = path + "models/"
     evals, masses = testingProcedure(path, testNetworkPath, parameters, "Final", parameters.FINAL_TEST_NUM)
     # TODO: add more test scenarios for multiple greedy bots and full model check
 
@@ -1316,23 +1318,25 @@ def run():
         if parameters.ENABLE_TESTING:
             testStartTime = time.time()
             # Post train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing post-training tests...\n")
-            runFinalTests(modelPath, parameters)
-            print("\nFinal tests completed.\n")
-            # During train testing
-            print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-            print("Performing during training tests...")
-            testResults = []
-            smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
-            for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
-                testName = str(testPercent) + "%"
-                testStepNumber = testPercent * smallPart
-                testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_model.h5"
-                testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
-                                                    parameters.DUR_TRAIN_TEST_NUM)[0])
-            exportTestResults(testResults, modelPath, parameters)
-            print("\nDuring training tests completed.")
+            if parameters.FINAL_TEST_NUM > 0:
+                print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("Performing post-training tests...\n")
+                runFinalTests(modelPath, parameters)
+                print("\nFinal tests completed.\n")
+            if parameters.DUR_TRAIN_TEST_NUM > 0:
+                # During train testing
+                print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
+                print("Performing during training tests...")
+                testResults = []
+                smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
+                for testPercent in range(0, 101, parameters.TRAIN_PERCENT_TEST_INTERVAL):
+                    testName = str(testPercent) + "%"
+                    testStepNumber = testPercent * smallPart
+                    testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_"
+                    testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                        parameters.DUR_TRAIN_TEST_NUM)[0])
+                exportTestResults(testResults, modelPath, parameters)
+                print("\nDuring training tests completed.")
             print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
             modelPath = finalPathName(parameters, modelPath)
             print("--------")

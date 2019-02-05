@@ -16,6 +16,7 @@ def produceAverageRun(inits):
             currentStep = []
             for run in init:
                 currentStep.append(run[step])
+            print(currentStep)
             meanRun.append(numpy.mean(currentStep))
         allMeanRuns.append(meanRun)
     return allMeanRuns
@@ -136,10 +137,10 @@ def getDictDict(distributions):
             try:
                 dictDict[key]
             except KeyError:
+                print("Key Error.....")
                 dictDict[key] = {}
             dictDict[key][name] = data
     return dictDict
-
 
 
 
@@ -165,11 +166,11 @@ if __name__ == '__main__':
 
     distributions.sort(key = lambda distr: distr["name"])
 
-    #print("Distributions: ", distributions)
+    print("Distributions: ", distributions)
 
     dictDict = getDictDict(distributions)
 
-    #print("DictDict: ", dictDict)
+    # print("DictDict: ", dictDict)
 
     plotDict(dictDict)
 
