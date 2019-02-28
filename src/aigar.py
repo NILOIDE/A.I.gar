@@ -19,7 +19,6 @@ from builtins import input
 import multiprocessing as mp
 from time import sleep
 import gym
-# import cv2
 
 from view.view import View
 from modelCombiner import createCombinedModelGraphs, plot
@@ -911,13 +910,13 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
 
     # Move collector forward to decorrelate (to break correlations between game stage across collectors)
     print("Desynchronizing worker #" + str(processNum) + "...")
-    if parameters.CNN_REPR:
-        env.reset()
-        observation = env.render(mode='rgb_array')
-        size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
-        observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
-    else:
-        observation = np.array([env.reset()])
+    # if parameters.CNN_REPR:
+    #     env.reset()
+    #     observation = env.render(mode='rgb_array')
+    #     size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+    #     observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+    # else:
+    observation = np.array([env.reset()])
         
     step = 0
     rewardSum = 0
@@ -930,23 +929,23 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
             actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
         rewardSum += reward
-        if parameters.CNN_REPR:
-            observation = env.render(mode='rgb_array')
-            size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
-            observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
-        else:
-            observation = np.array([observation])
+        # if parameters.CNN_REPR:
+        #     observation = env.render(mode='rgb_array')
+        #     size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+        #     observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+        # else:
+        observation = np.array([observation])
         step += 1
         if done:
             if parameters.GAME_NAME[:8] == "CartPole":
                 reward = -1
-            if parameters.CNN_REPR:
-                env.reset()
-                observation = env.render(mode='rgb_array')
-                size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
-                observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
-            else:
-                observation = np.array([env.reset()])
+            # if parameters.CNN_REPR:
+            #     env.reset()
+            #     observation = env.render(mode='rgb_array')
+            #     size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
+            #     observation = cv2.resize(observation, dsize=size, interpolation=cv2.INTER_CUBIC)
+            # else:
+            observation = np.array([env.reset()])
             step = 0
             rewardSum = 0
     print("Finished desynchronizing worker #" + str(processNum) + ".")
