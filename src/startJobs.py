@@ -95,7 +95,7 @@ def displayJobs(jobs):
 
 
 def runJobs(jobs, email):
-    sampleJobScriptFile = open("anton.sh", "r")
+    sampleJobScriptFile = open("submission.sh", "r")
     sampleLines = sampleJobScriptFile.readlines()
 
     timeLineBase = sampleLines[1][:15]
@@ -130,12 +130,6 @@ def runJobs(jobs, email):
                 timeStepFactor *= int(paramVal) / 500000
             elif paramName == "USE_ACTION_AS_INPUT":
                 timeOtherFactor *= 5
-            elif paramName == "ACTOR_CRITIC_TYPE":
-                algorithmType = 2
-                if paramVal == "\"DPG\"":
-                    timeOtherFactor *= 2
-                elif paramVal == "\"CACLA\"":
-                    timeOtherFactor *= 1.2
             elif paramName == "CNN_REPR":
                 cnn = True
             elif paramName == "MEMORY_CAPACITY":
@@ -154,7 +148,7 @@ def runJobs(jobs, email):
                 timeOtherFactor *= 1.2
             elif paramName == "OCACLA_EXPL_SAMPLES":
                 timeOtherFactor *= int(paramVal) / 5 + 1
-
+            
         jobTime = math.ceil(standardTime * timeBotFactor * timeStepFactor * timeOtherFactor)
         if jobTime > 240:
             jobTime = 240
@@ -220,11 +214,11 @@ if __name__ == '__main__':
 
     displayJobs(jobs)
 
-    email = int(input("Emails:\n0 == antonwiehe@gmail.com\n1 == n.stolt.anso@student.rug.nl\nWhat email do you want to use?\n"))
+    email = int(input("Emails:\n0 == antonwiehe@gmail.com\n1 == nilstoltanso@gmail.com\nWhat email do you want to use?\n"))
     if email == 0:
         email = "antonwiehe@gmail.com"
     else:
-        email = "n.stolt.anso@student.rug.nl"
+        email = "nilstoltanso@gmail.com"
     print("EMAIL: ", email)
     jobSum = 0
     for job in jobs:
@@ -233,6 +227,6 @@ if __name__ == '__main__':
     if confirm == "y":
         runJobs(jobs, email)
         try:
-            subprocess.call(["squeue", "-u", "s2972301"])
+            subprocess.call(["squeue", "-u", "f115844"])
         except FileNotFoundError:
             print("I tried to give you an overview of the jobs, but it did not work :(")

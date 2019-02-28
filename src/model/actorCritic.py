@@ -253,7 +253,7 @@ class PolicyNetwork(object):
                 self.stateReprLen = CNN_state_repr_len(self.parameters)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
-            self.num_outputs = env.action_space.n
+            self.num_outputs = env.action_space.sample().shape[0]
         if modelName is not None:
             self.load(modelName)
         else:
@@ -415,7 +415,8 @@ class ActionValueNetwork(object):
                 self.stateReprLen = CNN_state_repr_len(self.parameters)
             else:
                 self.stateReprLen = env.observation_space.shape[0]
-            self.num_actions_inputs = env.action_space.n
+            self.num_actions_inputs = env.action_space.sample().shape[0]
+
 
         if modelName is not None:
             self.load(modelName)
@@ -568,8 +569,8 @@ class ActorCritic(object):
                 self.input_len = CNN_state_repr_len(self.parameters)
             else:
                 self.input_len = env.observation_space.shape[0]
-            self.action_len = env.action_space.n
-     
+            self.action_len = env.action_space.sample().shape[0]
+
         # Bookkeeping:
         self.latestTDerror = None
         self.qValues = []

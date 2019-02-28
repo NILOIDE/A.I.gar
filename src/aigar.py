@@ -521,10 +521,7 @@ def exportTestResults(testResults, path, parameters):
 
 
 # Perform 1 episode of the test. Return the mass over time list, the mean mass of the episode, and the max mass.
-def performTest(testNetworkPath, specialParams):
-    num_cores = mp.cpu_count()
-    if num_cores > 1:
-        os.sched_setaffinity(0, range(2, num_cores)) # Core #1 is reserved for trainer process
+def performAgarioTest(testNetworkPath, specialParams):
     testParams = createTestParams(*specialParams)
     testModel = Model(False, False, testParams)
     createModelPlayers(testParams, testModel, testNetworkPath)
@@ -544,7 +541,7 @@ def performTest(testNetworkPath, specialParams):
 
 # Test the model for 'n' amount of episodes for the given type of test. This is done in parallel uses a pool of workers.
 # The test results from all tests are put together into 1 structure to then be used for averaging and plotting.
-def testModel(testNetworkPath, testType, plotName, specialParams, n_tests, testName):
+def testAgarioModel(testNetworkPath, testType, plotName, specialParams, n_tests, testName):
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     print("Testing", testType, "...\n")
 
@@ -553,7 +550,7 @@ def testModel(testNetworkPath, testType, plotName, specialParams, n_tests, testN
     pool = mp.Pool(n_tests)
     print("Initializing " + str(n_tests) + " testers..." )
     print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-    testResults = pool.starmap(performTest, [(testNetworkPath, specialParams) for process in range(n_tests)])
+    testResults = pool.starmap(performAgarioTest, [(testNetworkPath, specialParams) for process in range(n_tests)])
     pool.close()
     pool.join()
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -591,22 +588,22 @@ def testingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     masses = {}
     packageName = getPackageName(path)
     testParams = [packageName]
-    testEvals["current"], masses["current"] = testModel(testNetworkPath, "test", "Test", testParams, n_tests, testName)
+    testEvals["current"], masses["current"] = testAgarioModel(testNetworkPath, "test", "Test", testParams, n_tests, testName)
 
     pelletTestParams = [packageName, False]
-    testEvals["pellet"], masses["pellet"] = testModel(testNetworkPath, "pellet", "Pellet_Collection", pelletTestParams,
+    testEvals["pellet"], masses["pellet"] = testAgarioModel(testNetworkPath, "pellet", "Pellet_Collection", pelletTestParams,
                                                       n_tests, testName)
     if parameters.MULTIPLE_BOTS_PRESENT:
         greedyTestParams = (packageName, False, 1, 1)
-        testEvals["vsGreedy"], masses["vsGreedy"] = testModel(testNetworkPath, "vsGreedy", "Vs_Greedy", greedyTestParams,
+        testEvals["vsGreedy"], masses["vsGreedy"] = testAgarioModel(testNetworkPath, "vsGreedy", "Vs_Greedy", greedyTestParams,
                                                               n_tests, testName)
     if parameters.VIRUS_SPAWN:
         virusTestParams = (packageName, True)
-        testEvals["virus"], masses["virus"] = testModel(testNetworkPath, "pellet_with_virus", "Pellet_Collection_with_Viruses",
+        testEvals["virus"], masses["virus"] = testAgarioModel(testNetworkPath, "pellet_with_virus", "Pellet_Collection_with_Viruses",
                                                         virusTestParams, n_tests, testName)
         if parameters.MULTIPLE_BOTS_PRESENT:
             virusGreedyTestParams = (packageName, True, 1, 1)
-            testEvals["virusGreedy"], masses["virusGreedy"] = testModel(testNetworkPath, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
+            testEvals["virusGreedy"], masses["virusGreedy"] = testAgarioModel(testNetworkPath, "vsGreedy_with_virus", "Vs_Greedy_with_Viruses",
                                                                         virusGreedyTestParams, n_tests, testName)
     return testEvals, masses
 
@@ -645,6 +642,116 @@ def runFinalTests(path, parameters):
                   "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": path,
                   "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
         plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
+
+
+def performGymTest(testNetworkPath, specialParams):
+    testParams = createTestParams(*specialParams)
+    # Create game instance
+    networkLoadPath = testNetworkPath
+    env = gym.make(testParams.GAME_NAME)
+    learningAlg = None
+    if testParams.ALGORITHM == "Q-learning":
+        learningAlg = QLearn(testParams)
+    elif testParams.ALGORITHM == "CACLA":
+        learningAlg = ActorCritic(testParams)
+    elif testParams.ALGORITHM == "DPG":
+        learningAlg = ActorCritic(testParams)
+    elif testParams.ALGORITHM == "SPG":
+        learningAlg = ActorCritic(testParams)
+    else:
+        print("Please enter a valid algorithm.\n")
+        quit()
+    networks = {}
+    networks = learningAlg.initializeNetwork(networkLoadPath, networks)
+    observation = np.array([env.reset()])
+
+    reward_list = []
+    rewardSum = 0
+    done = False
+    # Run game until terminated
+    while True:
+        actionIdx, action = learningAlg.decideMove(observation)
+        if testParams.ALGORITHM in {"CACLA", "DPG", "SPG"}:
+            actionIdx = np.argmax(action)
+        for _ in range(testParams.FRAME_SKIP_RATE):
+            observation, reward, done, info = env.step(actionIdx)
+            observation = np.array([observation])
+            rewardSum += reward
+            if done:
+                if testParams.GAME_NAME[:8] == "CartPole":
+                    reward_list.append(-1.0)
+                break
+
+        reward_list.append(rewardSum)
+        rewardSum = 0
+        if done:
+            break
+    return [reward_list, np.mean(reward_list), np.max(reward_list), os.getpid()]
+
+
+def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
+    # TODO: Perform all test kinds simultaneously
+    testEvals = {}
+    packageName = getPackageName(path)
+    testParams = [packageName]
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    print("Testing", parameters.GAME_NAME, "...\n")
+
+    start = time.time()
+    # Parallel testing
+    pool = mp.Pool(n_tests)
+    print("Initializing " + str(n_tests) + " testers...")
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+    testResults = pool.starmap(performGymTest, [(testNetworkPath, testParams) for process in range(n_tests)])
+    pool.close()
+    pool.join()
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    print(testName + " test's runs finished.\n")
+    for result in testResults:
+        print("Process id #" + str(result[3]) + "'s test run:" +
+              "\n   Number of rewards in test: " + str(len(result[0])) +
+              "\n   Mean reward: " + str(result[1]) +
+              "\n   Max reward: " + str(result[2]) +
+              "\n")
+    print("Number of tests:   " + str(n_tests) + "\n" +
+          "Time elapsed:      " + str.format('{0:.3f}', time.time() - start) + "s")
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+    evals = {"name": testName}
+    rewards = [reward_list[0] for reward_list in testResults]
+    testResults = np.array(testResults)
+    evals["meanScore"] = np.mean(testResults[:,1])
+    evals["stdMean"] = np.std(testResults[:,1])
+    evals["meanMaxScore"] = np.mean(testResults[:,2])
+    evals["stdMax"] = np.std(testResults[:,2])
+    evals["maxScore"] = np.max(testResults[:,2])
+
+    return testEvals, rewards
+
+
+def runFinalGymTests(path, parameters):
+    testNetworkPath = path + "models/"
+    evals, rewards = gymTestingProcedure(path, testNetworkPath, parameters, "Final", parameters.FINAL_TEST_NUM)
+
+    name_of_file = path + "/final_results.txt"
+    with open(name_of_file, "w") as file:
+        data = "Number of runs per testing: " + str(parameters.FINAL_TEST_NUM) + "\n"
+        for testType in evals:
+            name = evals[testType]["name"]
+            maxScore = str(round(evals[testType]["maxScore"], 1))
+            meanScore = str(round(evals[testType]["meanScore"], 1))
+            stdMean = str(round(evals[testType]["stdMean"], 1))
+            meanMaxScore = str(round(evals[testType]["meanMaxScore"], 1))
+            stdMax = str(round(evals[testType]["stdMax"], 1))
+            data += name + " Highscore: " + maxScore + " Mean: " + meanScore + " StdMean: " + stdMean \
+                    + " Mean_Max_Score: " + meanMaxScore + " Std_Max_Score: " + stdMax + "\n"
+        file.write(data)
+
+    print("\nPlotting test run...\n")
+    labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
+              "yLabel": "Reward mean value", "title": "Reward plot test phase", "path": path,
+              "subPath": "Mean_Reward"}
+
+    plot(rewards, parameters.RESET_LIMIT, 1, labels)
 
 
 def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0):
@@ -813,6 +920,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         observation = np.array([env.reset()])
         
     step = 0
+    rewardSum = 0
     for i in range((processNum-1) * 100):
         if guiEnabled and processInGUISet:
             env.render()
@@ -821,6 +929,7 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
         if parameters.ALGORITHM == "CACLA" or parameters.ALGORITHM == "DPG" or parameters.ALGORITHM == "SPG":
             actionIdx = np.argmax(action)
         observation, reward, done, info = env.step(actionIdx)
+        rewardSum += reward
         if parameters.CNN_REPR:
             observation = env.render(mode='rgb_array')
             size = (parameters.CNN_INPUT_DIM_1, parameters.CNN_INPUT_DIM_1)
@@ -829,7 +938,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
             observation = np.array([observation])
         step += 1
         if done:
-            reward = -1
+            if parameters.GAME_NAME[:8] == "CartPole":
+                reward = -1
             if parameters.CNN_REPR:
                 env.reset()
                 observation = env.render(mode='rgb_array')
@@ -838,13 +948,13 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
             else:
                 observation = np.array([env.reset()])
             step = 0
+            rewardSum = 0
     print("Finished desynchronizing worker #" + str(processNum) + ".")
     events[processNum].set()
     events["Col_can_proceed"].wait()
 
     # Run game until terminated
     while True:
-        # actionIdx, action = learningAlg.decideMove(observation)
         actionIdx, action = learningAlg.decideMove(observation)
         if parameters.ALGORITHM in {"CACLA", "DPG", "SPG"}:
             actionIdx = np.argmax(action)
@@ -853,12 +963,13 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
                 env.render()
             new_observation, reward, done, info = env.step(actionIdx)
             new_observation = np.array([new_observation])
+            rewardSum += reward
             step += 1
             if done:
-                reward = -1
+                if parameters.GAME_NAME[:8] == "CartPole":
+                    reward = -1
                 break
         experienceList = [np.array([observation, action, reward, new_observation, None])]
-        # print(experienceList)
         events["Col_can_proceed"].clear()
         # After collector has 'n' amount of experiences, send them to trainer.
         if __debug__:
@@ -884,11 +995,12 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
                 print("Collector" + str(processNum) + " set weights hash: " + m.hexdigest())
         if done:
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n" +
-                  "Collector #" + str(processNum) + " had an episode length of " + str(step))
+                  "Collector #" + str(processNum) + " had an episode reward of " + str(rewardSum))
             print("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
             observation = env.reset()
             observation = np.array([observation])
             step = 0
+            rewardSum = 0
         else:
             observation = new_observation
 
@@ -1020,7 +1132,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     targNet_stepChunk = parameters.TARGET_NETWORK_STEPS
     printSteps = 500
     timeStep = time.time()
-    if parameters.GAME_NAME != "Agar.io":
+    if parameters.GAME_NAME[:8] == "CartPole":
         cartPoleTest(learningAlg, path, "start.png", parameters)
 
     for step in range(parameters.CURRENT_STEP, parameters.MAX_TRAINING_STEPS):
@@ -1094,7 +1206,7 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     if __debug__:
         print("Trainer sending signal: 'DONE'")
     queue.put("DONE")
-    if parameters.GAME_NAME != "Agar.io":
+    if parameters.GAME_NAME[:8] == "CartPole":
         cartPoleTest(learningAlg, path, "end.png", parameters)
 
 
@@ -1203,7 +1315,7 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
               "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n")
 
     print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-print("Training done.\n")
+    print("Training done.\n")
 
 
 def run():
@@ -1298,18 +1410,18 @@ def run():
 
     # Determine number of humans
     numberOfHumans = 0
-    if guiEnabled:
-        numberOfHumans = int(input("Please enter the number of human players: (" + str(MAXHUMANPLAYERS) + " max)\n"))
-    spectate = None
-    if guiEnabled and not numberOfHumans > 0:
-        spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
+    spectate = 0
+    if parameters.GAME_NAME == "Agar.io":
+        if guiEnabled:
+            numberOfHumans = int(input("Please enter the number of human players: (" + str(MAXHUMANPLAYERS) + " max)\n"))
+        spectate = None
+        if guiEnabled and not numberOfHumans > 0:
+            spectate = int(input("Do want to spectate an individual bot's FoV? (1 = yes)\n")) == 1
 
     if numberOfHumans == 0:
         startTime = time.time()
         if parameters.ENABLE_TRAINING:
             trainingProcedure(parameters, model_in_subfolder, loadModel, modelPath, startTime, guiEnabled, spectate)
-
-        if parameters.ENABLE_TRAINING:
             print("--------")
             print("Training time elapsed:               " + elapsedTimeText(int(time.time()- startTime)))
             print("Average time per update:    " +
@@ -1321,7 +1433,10 @@ def run():
             if parameters.FINAL_TEST_NUM > 0:
                 print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
                 print("Performing post-training tests...\n")
-                runFinalTests(modelPath, parameters)
+                if parameters.GAME_NAME == "Agar.io":
+                    runFinalTests(modelPath, parameters)
+                else:
+                    runFinalGymTests(modelPath,parameters)
                 print("\nFinal tests completed.\n")
             if parameters.DUR_TRAIN_TEST_NUM > 0:
                 # During train testing
@@ -1333,8 +1448,12 @@ def run():
                     testName = str(testPercent) + "%"
                     testStepNumber = testPercent * smallPart
                     testNetworkPath = modelPath + "models/" + str(testStepNumber) + "_"
-                    testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
-                                                        parameters.DUR_TRAIN_TEST_NUM)[0])
+                    if parameters.GAME_NAME == "Agar.io":
+                        testResults.append(testingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                            parameters.DUR_TRAIN_TEST_NUM)[0])
+                    else:
+                        testResults.append(gymTestingProcedure(modelPath, testNetworkPath, parameters, testName,
+                                                            parameters.DUR_TRAIN_TEST_NUM)[0])
                 exportTestResults(testResults, modelPath, parameters)
                 print("\nDuring training tests completed.")
             print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")

@@ -5,7 +5,7 @@ VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "HalfCheetah-v2"#"MountainCarContinuous-v0"
+GAME_NAME = "Agar.io"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
@@ -17,20 +17,20 @@ NUM_RANDOM_BOTS = 0
 ENABLE_GREEDY_SPLIT = False
 
 # Experience replay:
-EXP_REPLAY_ENABLED = False
+EXP_REPLAY_ENABLED = True
 PRIORITIZED_EXP_REPLAY_ENABLED = False if EXP_REPLAY_ENABLED else False
-MEMORY_CAPACITY = 10000
-MEMORY_BATCH_LEN = 64
+MEMORY_CAPACITY = 40000
+MEMORY_BATCH_LEN = 32
 MEMORY_ALPHA = 0.6
 MEMORY_BETA = 0.4
 
 # General Training:
 ENABLE_TRAINING = True
 ENABLE_TESTING = True
-DUR_TRAIN_TEST_NUM = 10
+DUR_TRAIN_TEST_NUM = 5
 TRAIN_PERCENT_TEST_INTERVAL = 5
-FINAL_TEST_NUM = 0
-FRAME_SKIP_RATE = 6
+FINAL_TEST_NUM = 10
+FRAME_SKIP_RATE = 4
 MAX_TRAINING_STEPS = 500000
 CURRENT_STEP = 0
 MAX_SIMULATION_STEPS = MAX_TRAINING_STEPS * (FRAME_SKIP_RATE + 1)
@@ -48,12 +48,12 @@ MAXNORM = 3
 BATCHNORM = False
 # General RL:
 MASS_AS_REWARD = False
-DISCOUNT = 0.90
+DISCOUNT = 0.95
 END_DISCOUNT = 0#0.85 # set to 0 to disable
 DISCOUNT_INCREASE_FACTOR = (1 - END_DISCOUNT) ** (1 / MAX_TRAINING_STEPS) if MAX_TRAINING_STEPS != 0 else 0
 # Noise and Exploration:
 NOISE_TYPE = "Gaussian"  # "Gaussian" / "Orn-Uhl"
-GAUSSIAN_NOISE = 1 # Initial noise
+GAUSSIAN_NOISE = 1.0 # Initial noise
 NOISE_AT_HALF_TRAINING = 0.02
 NOISE_DECAY = NOISE_AT_HALF_TRAINING ** (1 / (MAX_TRAINING_STEPS / 2)) if MAX_TRAINING_STEPS != 0 else 0
 ORN_UHL_THETA = 0.15
@@ -128,7 +128,7 @@ ACTOR_IS = False # Enable importance sampling of priotized exp replay also for t
 AC_ACTOR_TDE = 0 # How much to use the TDE of the Actor to prioritize experience in the replay buffer
 AC_DELAY_ACTOR_TRAINING = 0
 AC_ACTOR_TRAINING_START = AC_DELAY_ACTOR_TRAINING * MAX_TRAINING_STEPS
-AC_NOISE_AT_HALF = 0.03
+AC_NOISE_AT_HALF = 0.05
 AC_NOISE_DECAY = AC_NOISE_AT_HALF ** (1 / (MAX_TRAINING_STEPS / 2)) if MAX_TRAINING_STEPS != 0 else 0
 #ACTOR_CRITIC_TYPE = "CACLA" # "Standard"/"CACLA" / "DPG". Standard multiplies gradient by tdE, CACLA only updates once for positive tdE
 SOFT_TARGET_UPDATES = True
@@ -138,9 +138,9 @@ OPTIMIZER_POLICY = "Adam"
 ACTIVATION_FUNC_HIDDEN_POLICY = "relu"
 
 # CACLA:
-CACLA_CRITIC_LAYERS         = (100,)
+CACLA_CRITIC_LAYERS         = (100,100)
 CACLA_CRITIC_ALPHA          = 0.000075
-CACLA_ACTOR_LAYERS          = (100,)
+CACLA_ACTOR_LAYERS          = (100,100)
 CACLA_ACTOR_ALPHA           = 0.0005
 CACLA_TAU                   = 0.02
 CACLA_UPDATE_ON_NEGATIVE_TD = False
@@ -166,7 +166,7 @@ OCACLA_NOISE_DECAY           = OCACLA_END_NOISE ** (OCACLA_START_NOISE / MAX_TRA
 
 # Deterministic Policy Gradient (DPG):
 DPG_TAU                    = 0.001 # How quickly the weights of the target networks are updated
-DPG_CRITIC_LAYERS          = (80,80)
+DPG_CRITIC_LAYERS          = (100,100)
 DPG_CRITIC_ALPHA           = 0.0005
 DPG_CRITIC_FUNC            = "relu"
 DPG_CRITIC_WEIGHT_DECAY    = 0 #0.001 L2 weight decay parameter. Set to 0 to disable
@@ -214,7 +214,7 @@ CNN_P_INCEPTION = False
 CNN_LAST_GRID = False
 
 # Multiprocessing:
-NUM_COLLECTORS = 32
+NUM_COLLECTORS = 1
 NUM_EXPS_BEFORE_TRAIN = 64#int(MEMORY_CAPACITY/40)
 ENABLE_GPU = False
 NUM_GPUS = 1 if ENABLE_GPU == True else 0
