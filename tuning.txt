@@ -1,0 +1,38 @@
+Agar.io
+
+MEMORY_CAPACITY 2x:
+20000 460
+40000 524
+75000 471
+
+FRAME_SKIP_RATE 2x:
+4     487 (very noisy)
+6     476
+8     492
+
+DISCOUNT 2x:
+0.90  519
+0.95  525 (noisy)
+0.98  463 (very noisy)
+
+AC_NOISE_AT_HALF:
+0.02  498
+0.03  502
+0.05  532
+
+
+
+DPG_TAU:
+0.01   461
+0.001  510
+0.0001 471
+
+-------------
+
+HalfCheetah-v2
+
+DISCOUNT 2x:
+0.9 ~100
+0.95 ~200
+0.99 ~500
+

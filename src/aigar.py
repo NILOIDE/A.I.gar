@@ -3,7 +3,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' #This suppresses tensorflow AVX warning
 import importlib
 import importlib.util
 import shutil
-# import psutil
+import psutil
 import distutils
 import time
 import datetime
@@ -790,8 +790,8 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     num_cores = mp.cpu_count()
     if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
-    # p = psutil.Process()
-    # p.nice(0)
+    p = psutil.Process()
+    p.nice(0)
 
     # Create game instance
     networkLoadPath = modelPath + "models/"
@@ -884,8 +884,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     num_cores = mp.cpu_count()
     if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
         os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
-    # p = psutil.Process()
-    # p.nice(0)
+    p = psutil.Process()
+    p.nice(0)
 
     # Create game instance
     networkLoadPath = modelPath + "models/"
@@ -1085,8 +1085,8 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     num_cores = mp.cpu_count()
     if num_cores > 1 and parameters.NUM_COLLECTORS > 2:
         os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
-    # p = psutil.Process()
-    # p.nice(0)
+    p = psutil.Process()
+    p.nice(0)
     networkPath = path + "models/"
     learningAlg = createLearner(parameters, networkPath)
     weight_manager.append(learningAlg.getNetworkWeights())

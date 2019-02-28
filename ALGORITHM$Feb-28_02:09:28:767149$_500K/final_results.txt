@@ -1,0 +1,3 @@
+Number of runs per testing: 10
+test Highscore: 637.9 Mean: 320.7 StdMean: 122.8 Mean_Max_Score: 510.6 Std_Max_Score: 175.0
+pellet Highscore: 639.0 Mean: 352.9 StdMean: 126.7 Mean_Max_Score: 527.6 Std_Max_Score: 169.9
