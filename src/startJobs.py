@@ -176,7 +176,6 @@ def runJobs(jobs, email):
                + "0\n0\n" + paramData +"0\n0\nEOF\n"
         script.write(data)
         script.close()
-        quit()
 
         print("Job: ", fileName)
         print("Job hours: ", jobTime)
