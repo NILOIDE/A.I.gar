@@ -1265,9 +1265,8 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     trainInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
     num_cores = mp.cpu_count()
-    print(num_cores)
     if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
-        os.sched_setaffinity(0, {num_cores-1})  # Core #0 is reserved for trainer process
+        os.sched_setaffinity(0, {i for i in range(1, num_cores)})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
         # Create collectors and exp queue
         experience_queue = mp.Queue()
