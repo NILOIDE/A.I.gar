@@ -102,7 +102,7 @@ def runJobs(jobs, email):
     outputNameLineBase = sampleLines[6][:17]
     sampleJobScriptFile.close()
 
-    standardTime = 13  # hours for 500k steps for standard Q-learning without other bots
+    standardTime = 23  # hours for 500k steps for standard Q-learning without other bots
 
     for idx, job in enumerate(jobs):
         paramData = ""
@@ -110,7 +110,6 @@ def runJobs(jobs, email):
         timeBotFactor = 1
         timeStepFactor = 1
         timeOtherFactor = 1
-        algorithmType = 0
         memoryLimit = 20000
         cnn = False
         for paramIdx in range(len(job[0])):
@@ -165,7 +164,6 @@ def runJobs(jobs, email):
             timeLine += ":00:00\n"
 
         outputNameLine = outputNameLineBase + outputName + "%j.out\n"
-        algorithmLine = str(algorithmType) + "\n"
         fileName = outputName[:-1] + ".sh"
         script = open(fileName, "w+")
 
@@ -175,9 +173,10 @@ def runJobs(jobs, email):
                + outputNameLine\
                + "module load matplotlib/2.1.2-foss-2018a-Python-3.6.4\nmodule load TensorFlow/1.6.0-foss-2018a-Python-3.6.4\n" \
                + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\npython -O ./aigar.py <<EOF\n" \
-               + "0\n0\n" +algorithmLine + paramData +"0\n0\n1\nEOF\n"
+               + "0\n0\n" + paramData +"0\n0\nEOF\n"
         script.write(data)
         script.close()
+        quit()
 
         print("Job: ", fileName)
         print("Job hours: ", jobTime)
