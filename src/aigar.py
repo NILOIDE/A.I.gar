@@ -787,9 +787,9 @@ def performModelSteps(experience_queue, processNum, model_in_subfolder, loadMode
     parameters = importlib.util.module_from_spec(SPEC_OS)
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
-    num_cores = mp.cpu_count()
-    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
-        os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
+    # num_cores = mp.cpu_count()
+    # if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
+    #     os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
     # p = psutil.Process()
     # p.nice(0)
 
@@ -882,8 +882,8 @@ def performGymSteps(experience_queue, processNum, model_in_subfolder, loadModel,
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
     num_cores = mp.cpu_count()
-    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
-        os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
+    # if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
+    #     os.sched_setaffinity(0, {(processNum-1)%(num_cores-1)+1})  # Core #1 is reserved for trainer process
     # p = psutil.Process()
     # p.nice(0)
 
@@ -1082,9 +1082,9 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
     SPEC_OS.loader.exec_module(parameters)
     del SPEC_OS
     # Increase priority of this process
-    num_cores = mp.cpu_count()
-    if num_cores > 1 and parameters.NUM_COLLECTORS > 2:
-        os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
+    # num_cores = mp.cpu_count()
+    # if num_cores > 1 and parameters.NUM_COLLECTORS > 2:
+    #     os.sched_setaffinity(0, {0})  # Core #0 is reserved for trainer process
     # p = psutil.Process()
     # p.nice(0)
     networkPath = path + "models/"
@@ -1264,9 +1264,9 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
     currentPart = parameters.CURRENT_STEP
     smallPart = max(int(parameters.MAX_TRAINING_STEPS / 100), 1)  # Get int value closest to to 1% of training time
     trainInterval = smallPart * parameters.TRAIN_PERCENT_TEST_INTERVAL
-    num_cores = mp.cpu_count()
-    if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
-        os.sched_setaffinity(0, {i for i in range(1, num_cores)})  # Core #0 is reserved for trainer process
+    # num_cores = mp.cpu_count()
+    # if num_cores > 1 and parameters.NUM_COLLECTORS > 1:
+    #     os.sched_setaffinity(0, {i for i in range(1, num_cores)})  # Core #0 is reserved for trainer process
     while currentPart < parameters.MAX_TRAINING_STEPS:
         # Create collectors and exp queue
         experience_queue = mp.Queue()
