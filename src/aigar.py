@@ -589,9 +589,9 @@ def testingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     testParams = [packageName]
     testEvals["current"], masses["current"] = testAgarioModel(testNetworkPath, "test", "Test", testParams, n_tests, testName)
 
-    pelletTestParams = [packageName, False]
-    testEvals["pellet"], masses["pellet"] = testAgarioModel(testNetworkPath, "pellet", "Pellet_Collection", pelletTestParams,
-                                                      n_tests, testName)
+    # pelletTestParams = [packageName, False]
+    # testEvals["pellet"], masses["pellet"] = testAgarioModel(testNetworkPath, "pellet", "Pellet_Collection", pelletTestParams,
+    #                                                   n_tests, testName)
     if parameters.MULTIPLE_BOTS_PRESENT:
         greedyTestParams = (packageName, False, 1, 1)
         testEvals["vsGreedy"], masses["vsGreedy"] = testAgarioModel(testNetworkPath, "vsGreedy", "Vs_Greedy", greedyTestParams,
