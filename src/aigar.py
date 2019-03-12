@@ -642,6 +642,16 @@ def runFinalTests(path, parameters):
                   "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
         plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
 
+# Plot test results and export data
+def exportGymTestResults(testResults, path, parameters):
+    maxSteps = parameters.MAX_TRAINING_STEPS
+    if not os.path.exists(path + "data/"):
+        os.mkdir(path + "data/")
+    meanMassesOfTestResults = [val["current"]["meanScore"] for val in testResults]
+    exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
+
+    testInterval =int(maxSteps/100 *parameters.TRAIN_PERCENT_TEST_INTERVAL)
+    plotTesting(testResults, path, testInterval, maxSteps)
 
 def performGymTest(testNetworkPath, specialParams):
     testParams = createTestParams(*specialParams)
@@ -690,7 +700,6 @@ def performGymTest(testNetworkPath, specialParams):
 
 def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     # TODO: Perform all test kinds simultaneously
-    testEvals = {}
     packageName = getPackageName(path)
     testParams = [packageName]
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -723,8 +732,9 @@ def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     evals["meanMaxScore"] = np.mean(testResults[:,2])
     evals["stdMax"] = np.std(testResults[:,2])
     evals["maxScore"] = np.max(testResults[:,2])
-
-    return testEvals, rewards
+    testTypeEvals = {"current": evals}
+    testTypeRewards = {"current": rewards}
+    return testTypeEvals, testTypeRewards
 
 
 def runFinalGymTests(path, parameters):
@@ -749,8 +759,7 @@ def runFinalGymTests(path, parameters):
     labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
               "yLabel": "Reward mean value", "title": "Reward plot test phase", "path": path,
               "subPath": "Mean_Reward"}
-
-    plot(rewards, parameters.RESET_LIMIT, 1, labels)
+    plot(rewards["current"], parameters.RESET_LIMIT, 1, labels)
 
 
 def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0):
@@ -1453,7 +1462,10 @@ def run():
                     else:
                         testResults.append(gymTestingProcedure(modelPath, testNetworkPath, parameters, testName,
                                                             parameters.DUR_TRAIN_TEST_NUM)[0])
-                exportTestResults(testResults, modelPath, parameters)
+                if parameters.GAME_NAME == "Agar.io":
+                    exportTestResults(testResults, modelPath, parameters)
+                else:
+                    exportGymTestResults(testResults, modelPath, parameters)
                 print("\nDuring training tests completed.")
             print("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n")
             modelPath = finalPathName(parameters, modelPath)

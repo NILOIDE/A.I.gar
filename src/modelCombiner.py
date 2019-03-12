@@ -303,10 +303,15 @@ def getTimeAxis(maxLength, avgLength):
     return np.array(list(range(0, maxLength * avgLength, avgLength)))
 
 
-def getMeanAndStDev(allList, maxLength, stdError = False):
+def getMeanAndStDev(allList, stdError = False):
     print("Shape of allList: " + str(numpy.shape(allList)))
     mean_list = []
     stDev_list = []
+    maxLength = 0
+    for l in allList:
+        length = len(l)
+        if length > maxLength:
+            maxLength = length
     for i in range(maxLength):
         summed = 0
         num_lists = 0
@@ -331,13 +336,13 @@ def getMeanAndStDev(allList, maxLength, stdError = False):
         stDev_list.append(sd)
     mean_list = np.array(mean_list)
     stDev_list = np.array(stDev_list)
-    return mean_list, stDev_list
+    return mean_list, stDev_list, maxLength
 
 
 def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True, figureNum = 0):
     print("Plotting " + labels["title"] + "...")
+    y, ysigma, maxLength = getMeanAndStDev(ylist)
     x = getTimeAxis(maxLength, avgLength)
-    y, ysigma = getMeanAndStDev(ylist, maxLength)
     if y is None or ysigma is None:
         print(labels["title"] + " list is None.")
         return
@@ -356,7 +361,7 @@ def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showCon
     title = labels["title"].replace("_", " ")
     path = labels["path"] + "/" + labels["subPath"]
     if y2list is not None:
-        y2, y2sigma = getMeanAndStDev(y2list, maxLength)
+        y2, y2sigma, maxLength = getMeanAndStDev(y2list)
         y2_lower_bound = y2 - y2sigma
         y2_upper_bound = y2 + y2sigma
         ax.plot(x, y2, lw=2, label=labels2["meanLabel"], color='red')
