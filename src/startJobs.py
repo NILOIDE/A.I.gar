@@ -99,7 +99,7 @@ def runJobs(jobs, email):
     sampleLines = sampleJobScriptFile.readlines()
 
     timeLineBase = sampleLines[1][:15]
-    outputNameLineBase = sampleLines[6][:17]
+    outputNameLineBase = sampleLines[7][:17]
     sampleJobScriptFile.close()
 
     standardTime = 23  # hours for 500k steps for standard Q-learning without other bots
@@ -155,7 +155,7 @@ def runJobs(jobs, email):
         hours = jobTime % 24
 
         if cnn:
-            timeLine = timeLineBase + "2-23:00:00\n"
+            timeLine = timeLineBase + "2-23:59:59\n"
             memoryLimit = 120000
 
         else:
@@ -169,7 +169,8 @@ def runJobs(jobs, email):
 
         data = "#!/bin/bash\n"\
                + timeLine \
-               + "#SBATCH --mem=" + str(memoryLimit) + "\n#SBATCH --nodes=1\n#SBATCH --mail-type=ALL\n#SBATCH --mail-user=" + email + "\n"\
+               + "#SBATCH --mem=" + str(memoryLimit) + "\n#SBATCH --nodes=1\n#SBATCH --mail-type=ALL\n" \
+               + "#SBATCH --mail-user=" + email + "\n#SBATCH --cpus-per-task=24\n"\
                + outputNameLine\
                + "module load matplotlib/2.1.2-foss-2018a-Python-3.6.4\nmodule load TensorFlow/1.6.0-foss-2018a-Python-3.6.4\n" \
                + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\npython3 -O ./aigar.py <<EOF\n" \
