@@ -1,7 +1,8 @@
 #!/bin/bash
-#SBATCH --time=2-00:00:00
+#SBATCH --time=2-23:59:59
 #SBATCH --mem=20000
 #SBATCH --nodes=1
+#SBATCH --cpus-per-task=24
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=nilstoltanso@gmail.com
 #SBATCH --output=name%j.out

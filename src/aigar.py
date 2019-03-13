@@ -502,8 +502,8 @@ def exportTestResults(testResults, path, parameters):
         os.mkdir(path + "data/")
     meanMassesOfTestResults = [val["current"]["meanScore"] for val in testResults]
     exportResults(meanMassesOfTestResults, path + "data/", "testMassOverTime")
-    meanMassesOfPelletResults = [val["pellet"]["meanScore"] for val in testResults]
-    exportResults(meanMassesOfPelletResults, path + "data/", "Pellet_CollectionMassOverTime")
+    # meanMassesOfPelletResults = [val["pellet"]["meanScore"] for val in testResults]
+    # exportResults(meanMassesOfPelletResults, path + "data/", "Pellet_CollectionMassOverTime")
 
     if parameters.MULTIPLE_BOTS_PRESENT:
         meanMassesOfGreedyResults = [val["vsGreedy"]["meanScore"] for val in testResults]
