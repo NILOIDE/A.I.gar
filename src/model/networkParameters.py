@@ -154,7 +154,7 @@ CACLA_VAR_BETA              = 0.001
 
 # Sampled Policy Gradient (SPG):
 OCACLA_ENABLED               = True if ALGORITHM == "SPG" else False
-OCACLA_EXPL_SAMPLES          = 3
+OCACLA_EXPL_SAMPLES          = 5
 OCACLA_ONLINE_SAMPLES        = 0
 OCACLA_ONLINE_SAMPLING_NOISE = 0
 OCACLA_MOVING_GAUSSIAN       = True

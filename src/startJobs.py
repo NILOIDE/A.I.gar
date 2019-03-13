@@ -99,6 +99,7 @@ def runJobs(jobs, email):
     sampleLines = sampleJobScriptFile.readlines()
 
     timeLineBase = sampleLines[1][:15]
+    cpuLineBase = sampleLines[4][:24]
     outputNameLineBase = sampleLines[7][:17]
     sampleJobScriptFile.close()
 
@@ -112,6 +113,7 @@ def runJobs(jobs, email):
         timeOtherFactor = 1
         memoryLimit = 20000
         cnn = False
+        cpu_count = "4"
         for paramIdx in range(len(job[0])):
             paramName = job[0][paramIdx]
             paramVal = job[1][paramIdx]
@@ -147,7 +149,10 @@ def runJobs(jobs, email):
                 timeOtherFactor *= 1.2
             elif paramName == "OCACLA_EXPL_SAMPLES":
                 timeOtherFactor *= int(paramVal) / 5 + 1
-            
+            elif paramName == "NUM_COLLECTORS":
+                if int(paramVal) > 1:
+                    cpu_count = "24"
+
         jobTime = math.ceil(standardTime * timeBotFactor * timeStepFactor * timeOtherFactor)
         if jobTime > 240:
             jobTime = 240
@@ -163,6 +168,8 @@ def runJobs(jobs, email):
             timeLine += str(hours) if hours >= 10 else "0" + str(hours)
             timeLine += ":00:00\n"
 
+        cpuLine = cpuLineBase + cpu_count + "\n"
+
         outputNameLine = outputNameLineBase + outputName + "%j.out\n"
         fileName = outputName[:-1] + ".sh"
         script = open(fileName, "w+")
@@ -170,7 +177,8 @@ def runJobs(jobs, email):
         data = "#!/bin/bash\n"\
                + timeLine \
                + "#SBATCH --mem=" + str(memoryLimit) + "\n#SBATCH --nodes=1\n#SBATCH --mail-type=ALL\n" \
-               + "#SBATCH --mail-user=" + email + "\n#SBATCH --cpus-per-task=24\n"\
+               + "#SBATCH --mail-user=" + email + "\n" \
+               + cpuLine \
                + outputNameLine\
                + "module load matplotlib/2.1.2-foss-2018a-Python-3.6.4\nmodule load TensorFlow/1.6.0-foss-2018a-Python-3.6.4\n" \
                + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\npython3 -O ./aigar.py <<EOF\n" \
