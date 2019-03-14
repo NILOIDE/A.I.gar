@@ -699,7 +699,6 @@ def performGymTest(testNetworkPath, specialParams):
 
 
 def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
-    # TODO: Perform all test kinds simultaneously
     packageName = getPackageName(path)
     testParams = [packageName]
     print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -794,6 +793,7 @@ def process_controller_input(controller, view, model):
 
 def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events,
                       weight_manager, guiEnabled, spectate):
+    print("worker ready")
     SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
     parameters = importlib.util.module_from_spec(SPEC_OS)
     SPEC_OS.loader.exec_module(parameters)
@@ -1288,10 +1288,13 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path,
                                                collector_events, weight_manager, guiEnabled, spectate)
         for i in range(1, NUM_COLLECTORS + 1):
+            print("waiting")
             collector_events[i].wait()
+            print("wait passed")
             collector_events[i].clear()
         # Create training process and communication pipe
         trainer_master_queue = mp.Queue()
+        print("created queue")
         # TODO: Create multiple learners
         trainer = mp.Process(target=trainOnExperiences, args=(experience_queue, collector_events, path, trainer_master_queue, weight_manager))
         trainer.start()

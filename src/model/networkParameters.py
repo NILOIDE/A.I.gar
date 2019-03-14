@@ -48,7 +48,7 @@ MAXNORM = 3
 BATCHNORM = False
 # General RL:
 MASS_AS_REWARD = False
-DISCOUNT = 0.9
+DISCOUNT = 0.90
 END_DISCOUNT = 0#0.85 # set to 0 to disable
 DISCOUNT_INCREASE_FACTOR = (1 - END_DISCOUNT) ** (1 / MAX_TRAINING_STEPS) if MAX_TRAINING_STEPS != 0 else 0
 # Noise and Exploration:
