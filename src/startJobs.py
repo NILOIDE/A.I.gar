@@ -162,7 +162,8 @@ def runJobs(jobs, email):
         if cnn:
             timeLine = timeLineBase + "2-23:59:59\n"
             memoryLimit = 120000
-
+        elif cpu_count == "24":
+            timeLine = timeLineBase + "2-23:59:59\n"
         else:
             timeLine = timeLineBase + str(days) + "-"
             timeLine += str(hours) if hours >= 10 else "0" + str(hours)

@@ -732,6 +732,7 @@ def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     evals["meanMaxScore"] = np.mean(testResults[:,2])
     evals["stdMax"] = np.std(testResults[:,2])
     evals["maxScore"] = np.max(testResults[:,2])
+    evals["plotName"] = "Test"
     testTypeEvals = {"current": evals}
     testTypeRewards = {"current": rewards}
     return testTypeEvals, testTypeRewards
