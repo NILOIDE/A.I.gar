@@ -727,7 +727,8 @@ def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     evals = {"name": testName}
     rewards = [reward_list[0] for reward_list in testResults]
     testResults = np.array(testResults)
-    evals["meanScore"] = np.mean(testResults[:,1])
+    evals["meanScore"] = np.mean([np.sum(test) for test in testResults[:,0]])
+    # evals["meanScore"] = np.mean(testResults[:,1])
     evals["stdMean"] = np.std(testResults[:,1])
     evals["meanMaxScore"] = np.mean(testResults[:,2])
     evals["stdMax"] = np.std(testResults[:,2])
