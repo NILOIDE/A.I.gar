@@ -12,15 +12,16 @@ POINT_AVERAGING = 500
 RESET_INTERVAL = 20000
 
 
-def createCombinedModelGraphs(path):
+def createCombinedModelGraphs(path, isAgar=True):
     print("###############################")
     print("Generating average plots:\n")
     if path[-1] != "/":
         path = path + "/"
     print("Path: ", path)
-    plotTDErrorAndMean(path)
+    if isAgar:
+        plotTDErrorAndMean(path)
+        plotQValuesOverTime(path)
     plotMassesOverTime(path)
-    plotQValuesOverTime(path)
     plotTestingMassOverTime(path)
     plotFinalTests(path)
     print("Combining test results..")
@@ -123,13 +124,13 @@ def plotTDErrorAndMean(path):
                    "yLabel": "Reward mean value", "title": "Reward", "path": path, "subPath": "Mean_Reward"}
 
     # Combined plot
-    plot(allErrorLists, maxLength, POINT_AVERAGING, errorLabels, allRewardLists, rewardLabels)
+    plot(allErrorLists, POINT_AVERAGING, errorLabels, allRewardLists, rewardLabels)
 
     # Single plot Error
-    plot(allErrorLists, maxLength, POINT_AVERAGING, errorLabels)
+    plot(allErrorLists, POINT_AVERAGING, errorLabels)
 
     # Single plot Reward
-    plot(allRewardLists, maxLength, POINT_AVERAGING, rewardLabels)
+    plot(allRewardLists, POINT_AVERAGING, rewardLabels)
 
 
 def plotFinalTests(path):
@@ -213,7 +214,7 @@ def plotTestingMassOverTime(path):
         labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Training steps",
                   "yLabel": "Mass Mean Value", "title": test, "path": path,
                   "subPath":  test + "_Mean_Mass_Over_Time"}
-        plot(masses, maxLength, 5, labels, showConfInt = False)
+        plot(masses, 5, labels, showConfInt = False)
 
 
 def plotMassesOverTime(path):
@@ -339,7 +340,7 @@ def getMeanAndStDev(allList, stdError = False):
     return mean_list, stDev_list, maxLength
 
 
-def plot(ylist, maxLength, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True, figureNum = 0):
+def plot(ylist, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True, figureNum = 0):
     print("Plotting " + labels["title"] + "...")
     y, ysigma, maxLength = getMeanAndStDev(ylist)
     x = getTimeAxis(maxLength, avgLength)

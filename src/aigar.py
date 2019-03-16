@@ -640,7 +640,7 @@ def runFinalTests(path, parameters):
         labels = {"meanLabel": "Mean Mass", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
                   "yLabel": "Mass mean value", "title": "Mass plot test phase", "path": path,
                   "subPath": "Mean_Mass_" + str(evals[testType]["plotName"])}
-        plot(masses[testType], parameters.RESET_LIMIT, 1, labels)
+        plot(masses[testType], 1, labels)
 
 # Plot test results and export data
 def exportGymTestResults(testResults, path, parameters):
@@ -726,8 +726,8 @@ def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     evals = {"name": testName}
     rewards = [reward_list[0] for reward_list in testResults]
     testResults = np.array(testResults)
-    evals["meanScore"] = np.mean([np.sum(test) for test in testResults[:,0]])
-    # evals["meanScore"] = np.mean(testResults[:,1])
+    evals["sumScore"] = np.mean([np.sum(test) for test in testResults[:,0]])
+    evals["meanScore"] = np.mean(testResults[:,1])
     evals["stdMean"] = np.std(testResults[:,1])
     evals["meanMaxScore"] = np.mean(testResults[:,2])
     evals["stdMax"] = np.std(testResults[:,2])
@@ -748,19 +748,20 @@ def runFinalGymTests(path, parameters):
         for testType in evals:
             name = evals[testType]["name"]
             maxScore = str(round(evals[testType]["maxScore"], 1))
+            sumScore = str(round(evals[testType]["sumScore"], 1))
             meanScore = str(round(evals[testType]["meanScore"], 1))
             stdMean = str(round(evals[testType]["stdMean"], 1))
             meanMaxScore = str(round(evals[testType]["meanMaxScore"], 1))
             stdMax = str(round(evals[testType]["stdMax"], 1))
-            data += name + " Highscore: " + maxScore + " Mean: " + meanScore + " StdMean: " + stdMean \
-                    + " Mean_Max_Score: " + meanMaxScore + " Std_Max_Score: " + stdMax + "\n"
+            data += name + " Highscore: " + maxScore + " sumScore: " + sumScore + " Mean: " + meanScore +\
+                    " StdMean: " + stdMean + " Mean_Max_Score: " + meanMaxScore + " Std_Max_Score: " + stdMax + "\n"
         file.write(data)
 
     print("\nPlotting test run...\n")
     labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
               "yLabel": "Reward mean value", "title": "Reward plot test phase", "path": path,
               "subPath": "Mean_Reward"}
-    plot(rewards["current"], parameters.RESET_LIMIT, 1, labels)
+    plot(rewards["current"], 1, labels)
 
 
 def createModelPlayers(parameters, model, networkLoadPath=None, numberOfHumans=0):
@@ -1478,8 +1479,13 @@ def run():
             print("Testing time elapsed:               " + elapsedTimeText(int(time.time()- testStartTime)))
             print("--------")
         if model_in_subfolder:
-            print(os.path.join(modelPath))
-            createCombinedModelGraphs(os.path.join(modelPath))
+            super_path = ""
+            for i, c in enumerate(modelPath):
+                if c == "$":
+                    super_path = modelPath[:i]
+                    break
+            print(os.path.join(super_path))
+            createCombinedModelGraphs(os.path.join(super_path), parameters.GAME_NAME == "Agar.io")
         print("--------")
         print("Total time elapsed:               " + elapsedTimeText(int(time.time() - startTime)))
         print("--------")
