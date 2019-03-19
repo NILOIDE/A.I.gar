@@ -717,7 +717,7 @@ def gymTestingProcedure(path, testNetworkPath, parameters, testName, n_tests):
     for result in testResults:
         print("Process id #" + str(result[3]) + "'s test run:" +
               "\n   Number of rewards in test: " + str(len(result[0])) +
-              "\n   Mean reward: " + str(result[1]) +
+              "\n   Mean reward: " + str(np.sum(result[0])) +
               "\n   Max reward: " + str(result[2]) +
               "\n")
     print("Number of tests:   " + str(n_tests) + "\n" +
@@ -794,7 +794,6 @@ def process_controller_input(controller, view, model):
 
 def performModelSteps(experience_queue, processNum, model_in_subfolder, loadModel, modelPath, events,
                       weight_manager, guiEnabled, spectate):
-    print("worker ready")
     SPEC_OS = importlib.util.find_spec('.networkParameters', package=getPackageName(modelPath))
     parameters = importlib.util.module_from_spec(SPEC_OS)
     SPEC_OS.loader.exec_module(parameters)
@@ -1283,19 +1282,16 @@ def trainingProcedure(parameters, model_in_subfolder, loadModel, path, startTime
         # Create collectors and exp queue
         experience_queue = mp.Queue()
         collector_events = {"Col_can_proceed": mp.Event()}
-        for i in range(1,parameters.NUM_COLLECTORS+1):
+        for i in range(1, parameters.NUM_COLLECTORS + 1):
             collector_events[i] = mp.Event()
         weight_manager = mp.Manager().list()
         collectors = startExperienceCollectors(parameters, experience_queue, model_in_subfolder, loadModel, path,
                                                collector_events, weight_manager, guiEnabled, spectate)
-        for i in range(1, NUM_COLLECTORS + 1):
-            print("waiting")
+        for i in range(1, parameters.NUM_COLLECTORS + 1):
             collector_events[i].wait()
-            print("wait passed")
             collector_events[i].clear()
         # Create training process and communication pipe
         trainer_master_queue = mp.Queue()
-        print("created queue")
         # TODO: Create multiple learners
         trainer = mp.Process(target=trainOnExperiences, args=(experience_queue, collector_events, path, trainer_master_queue, weight_manager))
         trainer.start()
