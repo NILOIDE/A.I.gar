@@ -873,7 +873,7 @@ class ActorCritic(object):
 
         count = 0
         for sample_idx in range(batch_len):
-            old_s, a, idx, sample_a = batch[0][sample_idx], batch[1][sample_idx], batch[6][sample_idx], batch[4][sample_idx]
+            old_s, a, idx, sample_a = batch[0][sample_idx], batch[1][sample_idx], batch[2][sample_idx], batch[4][sample_idx]
             sample_weight = importance_weights[sample_idx]
             best_action_eval = evals[sample_idx]
             current_policy_action = self.actor.predict(old_s)
