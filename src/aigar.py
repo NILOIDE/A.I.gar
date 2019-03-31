@@ -1111,9 +1111,6 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
             expReplayer = PrioritizedReplayBuffer(parameters.MEMORY_CAPACITY, parameters.MEMORY_ALPHA, parameters.MEMORY_BETA)
         else:
             expReplayer = ReplayBuffer(parameters.MEMORY_CAPACITY)
-        # TODO: Uncomment for Anton's LSTM expReplay stuff
-        # expReplayer = ExpReplay(parameters)
-
         # Collect enough experiences before training
         print("\n******************************************************************")
         print("Beginning initial experience collection...")
@@ -1128,7 +1125,6 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
                 expReplayer.add(*experience)
             if __debug__:
                 print("Buffer size: " + str(len(expReplayer)) + " | " + str(parameters.NUM_EXPS_BEFORE_TRAIN))
-        # TODO: Start with buffer completely full?
         # TODO: can experiences be added in batch in Prioritized Replay Buffer?
         print("Initial experience collection completed.")
         print("Current replay buffer size:   ", len(expReplayer))
@@ -1175,7 +1171,6 @@ def trainOnExperiences(experience_queue, collector_events, path, queue, weight_m
         if __debug__:
             print("Trainer received a lists of " + str(len(batch)) + " exps.")
 
-        #TODO: Does AC have target netowrks?
         if parameters.EXP_REPLAY_ENABLED:
             for experience in batch:
                 expReplayer.add(*(experience[0]))
