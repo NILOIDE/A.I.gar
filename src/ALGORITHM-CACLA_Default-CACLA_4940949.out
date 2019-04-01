@@ -1,0 +1,41 @@
+/software/software/h5py/2.7.1-foss-2018a-Python-3.6.4/lib/python3.6/site-packages/h5py-2.7.1-py3.6-linux-x86_64.egg/h5py/__init__.py:36: FutureWarning: Conversion of the second argument of issubdtype from `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`.
+  from ._conv import register_converters as _register_converters
+Using TensorFlow backend.
+
+
+###############################################################################
+Peregrine Cluster
+Job 4940949 for user 'f115844'
+Finished at: Mon Apr  1 04:52:30 CEST 2019
+
+Job details:
+============
+
+Name                : test_thread.sh
+User                : f115844
+Partition           : regular
+Nodes               : pg-node057
+Cores               : 4
+State               : COMPLETED
+Submit              : 2019-03-31T18:42:10
+Start               : 2019-03-31T18:54:22
+End                 : 2019-04-01T04:52:30
+Reserved walltime   : 1-12:00:00
+Used walltime       :    09:58:08
+Used CPU time       : 51-13:16:36 (efficiency: 3102.84%)
+% User (Computation): 91.41%
+% System (I/O)      :  8.59%
+Mem reserved        : 20000M/node
+Max Mem used        : 1.13G (pg-node057)
+Max Disk Write      : 81.92K (pg-node057)
+Max Disk Read       : 2.66M (pg-node057)
+
+
+Acknowledgements:
+=================
+
+Please see this page if you want to acknowledge Peregrine in your publications:
+
+https://redmine.hpc.rug.nl/redmine/projects/peregrine/wiki/ScientificOutput
+
+################################################################################
