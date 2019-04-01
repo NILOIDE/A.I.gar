@@ -1,0 +1,5 @@
+ALGORITHM "DPG" &
+ Default "DPG" 10x:
+ CNN_REPR True &
+   Default "DPG_CNN" 10x:
+

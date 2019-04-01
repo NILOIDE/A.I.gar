@@ -1,0 +1,5 @@
+ALGORITHM "CACLA" &
+ Default "CACLA" 10x:
+ CNN_REPR True &
+  Default "CACLA_CNN" 10x:
+

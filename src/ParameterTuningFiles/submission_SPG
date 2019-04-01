@@ -1,0 +1,5 @@
+ALGORITHM "SPG" &
+ Default "SPG" 10x:
+ CNN_REPR True &
+   Default "SPG_CNN" 10x:
+

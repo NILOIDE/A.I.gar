@@ -101,9 +101,10 @@ def runJobs(jobs, email):
     timeLineBase = sampleLines[1][:15]
     cpuLineBase = sampleLines[4][:24]
     outputNameLineBase = sampleLines[7][:17]
+    threadLineBase = sampleLines[8][:]
     sampleJobScriptFile.close()
 
-    standardTime = 23  # hours for 500k steps for standard Q-learning without other bots
+    standardTime = 47  # hours for 500k steps for standard Q-learning without other bots
 
     for idx, job in enumerate(jobs):
         paramData = ""
@@ -180,12 +181,14 @@ def runJobs(jobs, email):
                + "#SBATCH --mem=" + str(memoryLimit) + "\n#SBATCH --nodes=1\n#SBATCH --mail-type=ALL\n" \
                + "#SBATCH --mail-user=" + email + "\n" \
                + cpuLine \
-               + outputNameLine\
+               + outputNameLine \
+               + threadLineBase \
                + "module load matplotlib/2.1.2-foss-2018a-Python-3.6.4\nmodule load TensorFlow/1.6.0-foss-2018a-Python-3.6.4\n" \
-               + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\npython3 -O ./aigar.py > " + outputName + ".txt<<EOF\n" \
+               + "module load h5py/2.7.1-foss-2018a-Python-3.6.4\npython3 -O ./aigar.py <<EOF\n" \
                + "0\n0\n" + paramData +"0\n0\nEOF\n"
         script.write(data)
         script.close()
+        quit()
 
         print("Job: ", fileName)
         print("Job hours: ", jobTime)
