@@ -152,7 +152,7 @@ def runJobs(jobs, email):
                 timeOtherFactor *= int(paramVal) / 5 + 1
             elif paramName == "NUM_COLLECTORS":
                 if int(paramVal) > 1:
-                    cpu_count = "24"
+                    cpu_count = "8"
 
         jobTime = math.ceil(standardTime * timeBotFactor * timeStepFactor * timeOtherFactor)
         if jobTime > 240:
@@ -163,7 +163,7 @@ def runJobs(jobs, email):
         if cnn:
             timeLine = timeLineBase + "2-23:59:59\n"
             memoryLimit = 120000
-        elif cpu_count == "24":
+        elif cpu_count == "8":
             timeLine = timeLineBase + "2-23:59:59\n"
         else:
             timeLine = timeLineBase + str(days) + "-"
