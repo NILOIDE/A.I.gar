@@ -114,7 +114,7 @@ def runJobs(jobs, email):
         timeOtherFactor = 1
         memoryLimit = 20000
         cnn = False
-        cpu_count = "4"
+        cpu_count = "2"
         for paramIdx in range(len(job[0])):
             paramName = job[0][paramIdx]
             paramVal = job[1][paramIdx]
