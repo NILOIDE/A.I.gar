@@ -82,7 +82,7 @@ class A2C(object):
                 self.input_len = CNN_state_repr_len(self.parameters)
             else:
                 self.input_len = env.observation_space.shape[0]
-            self.action_len = env.action_space.n
+            self.action_len = env.action_space.sample().shape[0]
 
         self.critic = None
         self.actor = None

@@ -4,7 +4,7 @@ import importlib
 import importlib.util
 import shutil
 # import psutil
-import distutils
+import distutils.dir_util
 import time
 import datetime
 from controller.controller import Controller

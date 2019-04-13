@@ -1,0 +1,6 @@
+Thu Apr 11 01:54:46 2019
+ERROR: Could not read hardware property
+
+Thu Apr 11 01:54:48 2019
+ERROR: Could not read hardware property
+

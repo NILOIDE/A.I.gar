@@ -7,6 +7,7 @@ import fnmatch
 import math
 import numpy
 import scipy.stats
+import sys
 
 POINT_AVERAGING = 500
 RESET_INTERVAL = 20000
@@ -172,14 +173,19 @@ def plotFinalTests(path):
         maxLength = allMaxLengths[test]
 
         labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Training steps",
-                  "yLabel": "Mass Mean Value", "title": test[:-4], "path": path,
+                  "yLabel": "Reward Mean Value", "title": test[:-4], "path": path,
                   "subPath": "Final_testing_" + test[:-4]}
-        plot(masses, maxLength, 1, labels, showConfInt = False)
+        plot(masses, 1, labels, showConfInt = False)
 
 
 def plotTestingMassOverTime(path):
     modelList = [i for i in os.listdir(path) if os.path.isdir(path + i)]
-
+    paramFile_name = path + modelList[0] + "/networkParameters.py"
+    with open(paramFile_name, 'r') as paramFile:
+        for line in paramFile:
+            if len(line) > len("MAX_TRAINING_STEPS"):
+                if line[:len("MAX_TRAINING_STEPS")] == "MAX_TRAINING_STEPS":
+                    max_train_steps = int(line[len("MAX_TRAINING_STEPS") + 3:])
     allTestsOverTime = {}
     allMaxLengths = {}
 
@@ -210,11 +216,12 @@ def plotTestingMassOverTime(path):
         print("Keyword: ", test)
         masses = allTestsOverTime[test]
         maxLength = allMaxLengths[test]
-
         labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Training steps",
-                  "yLabel": "Mass Mean Value", "title": test, "path": path,
-                  "subPath":  test + "_Mean_Mass_Over_Time"}
-        plot(masses, 5, labels, showConfInt = False)
+                  "yLabel": "Reward Mean Value", "title": test, "path": path,
+                  "subPath":  test + "_Mean_Reward_Over_Time"}
+        _, _, maxTestLength = getMeanAndStDev(masses)
+        interval = max_train_steps//(maxLength-1)
+        plot(masses, interval, labels, showConfInt = False)
 
 
 def plotMassesOverTime(path):
@@ -247,8 +254,8 @@ def plotMassesOverTime(path):
         return
 
     labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
-              "yLabel": "Mass mean value", "title": "Mass", "path": path, "subPath": "Mean_Mass"}
-    plot(allMassList, maxLength, POINT_AVERAGING, labels)
+              "yLabel": "Reward mean value", "title": "Reward", "path": path, "subPath": "Mean_Reward"}
+    plot(allMassList, POINT_AVERAGING, labels)
 
     episodeSize = int(numpy.ceil(RESET_INTERVAL / POINT_AVERAGING))
     cleanAllMassList = []
@@ -262,8 +269,9 @@ def plotMassesOverTime(path):
         cleanAllMassList.append(cleanMassList)
 
     labels = {"meanLabel": "Mean Reward", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
-              "yLabel": "Mass mean value", "title": "Mass", "path": path, "subPath": "Clean_Mean_Mass"}
-    plot(cleanAllMassList, int(numpy.floor(maxLength/episodeSize)), RESET_INTERVAL, labels)
+              "yLabel": "Reward mean value", "title": "Reward", "path": path, "subPath": "Clean_Mean_Reward"}
+    plot(cleanAllMassList, RESET_INTERVAL, labels)
+    #plot(cleanAllMassList, int(numpy.floor(maxLength/episodeSize)), RESET_INTERVAL, labels)
 
 
 
@@ -298,7 +306,7 @@ def plotQValuesOverTime(path):
 
     labels = {"meanLabel": "Mean Q-value", "sigmaLabel": '$\sigma$ range', "xLabel": "Step number",
               "yLabel": "Q-value mean value", "title": "Q-value", "path": path, "subPath": "Mean_QValue" }
-    plot(allQValueList, maxLength, POINT_AVERAGING, labels)
+    plot(allQValueList, POINT_AVERAGING, labels)
 
 def getTimeAxis(maxLength, avgLength):
     return np.array(list(range(0, maxLength * avgLength, avgLength)))
@@ -340,7 +348,7 @@ def getMeanAndStDev(allList, stdError = False):
     return mean_list, stDev_list, maxLength
 
 
-def plot(ylist, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True, figureNum = 0):
+def plot(ylist, avgLength, labels, y2list=None, labels2=None, showConfInt = False, savePlot = True):
     print("Plotting " + labels["title"] + "...")
     y, ysigma, maxLength = getMeanAndStDev(ylist)
     x = getTimeAxis(maxLength, avgLength)
@@ -355,6 +363,7 @@ def plot(ylist, avgLength, labels, y2list=None, labels2=None, showConfInt = Fals
 
     fig, ax = plt.subplots(1)
     ax.plot(x, y, lw=2, label=labels["meanLabel"], color='blue')
+    ax.set_xticks(np.arange(x[0], x[-1]+1, x[-1]//5))
     ax.fill_between(x, y_lower_bound, y_upper_bound, facecolor='blue', alpha=0.5,
                     label=labels["sigmaLabel"])
     ax.set_xlabel(labels["xLabel"])
@@ -402,6 +411,10 @@ if __name__ == '__main__':
         if str(folder)[0] != "$":
             print("\n")
             print(folder)
-            createCombinedModelGraphs(subPath)
+            if len(sys.argv) > 1:
+                if sys.argv[1] != "Agar.io":
+                    createCombinedModelGraphs(subPath, sys.argv[1] == "Agar.io")
+            else:
+                createCombinedModelGraphs(subPath)
 
 
