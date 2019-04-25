@@ -5,7 +5,7 @@ VERY_DEBUG = False
 VIEW_ENABLED = True
 GUI_COLLECTOR_SET = {1}
 
-GAME_NAME = "Agar.io"
+GAME_NAME = "HalfCheetah-v2"
 # Game
 PELLET_SPAWN = True
 VIRUS_SPAWN = False
